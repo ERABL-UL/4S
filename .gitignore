@@ -1,0 +1,7 @@
+**/__pycache__/
+/checkpoint/
+/data_check1.py
+/lightning_logs/
+*.ply
+/untitled*.py
+/runs/
