@@ -7,7 +7,7 @@ from data_utils.ioueval import iouEval
 from data_utils.collations import *
 from numpy import inf, pi, cos, array, expand_dims
 from functools import partial
-# import OSToolBox as ost
+
 class SemanticKITTITrainer(pl.LightningModule):
     def __init__(self, model, model_head, criterion, train_loader, val_loader, params):
         super().__init__()
@@ -17,9 +17,7 @@ class SemanticKITTITrainer(pl.LightningModule):
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.params = params
-        print(params.percentage_labels)
-        print(params.checkpoint_epoch)
-        self.writer = SummaryWriter(f'runs/{params.checkpoint}_{params.checkpoint_epoch}')
+        self.writer = SummaryWriter(f'runs/{params.checkpoint}')
         self.iter_log = 100
         self.best_acc = -1.
         self.best_loss = inf
@@ -53,8 +51,7 @@ class SemanticKITTITrainer(pl.LightningModule):
         x, y = numpy_to_sparse_tensor(x_coord, x_feats, x_label)
 
         y = y[:,0]
-        # file_name = "/home/reza/PHD/Data/KITTI360/fps_knn/train/sequences/12/" + str(self.train_step) + ".ply"
-        # ost.write_ply(file_name, [x.slice(x).F.cpu().numpy(), y.cpu().numpy()], ['x','y','z','c'])
+
         z = self.forward(x)
         loss = self.criterion(z, y.long())
         pred = z.max(dim=1)[1]
@@ -84,7 +81,7 @@ class SemanticKITTITrainer(pl.LightningModule):
         x_coord, x_feats, x_label = batch
         x, y = numpy_to_sparse_tensor(x_coord, x_feats, x_label)
         y = y[:,0]
-        
+
         z = self.forward(x)
 
         loss = self.criterion(z, y.long())
@@ -219,13 +216,13 @@ class SemanticKITTITrainer(pl.LightningModule):
 
         if self.params.contrastive:
             # load model, best loss and optimizer
-            file_name = f'{self.params.log_dir}/{self.params.checkpoint_epoch}_model_contrastive_checkpoint.pt'
+            file_name = f'{self.params.log_dir}/../contrastive/lastepoch199_model_segment_contrast.pt'
             checkpoint = torch.load(file_name, map_location='cuda:0')
             self.model.load_state_dict(checkpoint['model'])
             print(f'Contrastive {file_name} loaded from epoch {checkpoint["epoch"]}')
         else:
             # load model, best loss and optimizer
-            file_name = f'{self.params.log_dir}/lastepoch199_model_{self.params.checkpoint}.pt'
+            file_name = f'{self.params.log_dir}/lastepoch199_model_segment_contrast.pt'
             checkpoint = torch.load(file_name)
             self.model.load_state_dict(checkpoint['model'])
             self.train_step = checkpoint['train_step']
@@ -235,7 +232,7 @@ class SemanticKITTITrainer(pl.LightningModule):
             print(f'{file_name} loaded from epoch {checkpoint["epoch"]}')
             
             # load model head
-            file_name = f'{self.params.log_dir}/lastepoch199_model_head_{self.params.checkpoint}.pt'
+            file_name = f'{self.params.log_dir}/lastepoch199_model_head_segment_contrast.pt'
             checkpoint = torch.load(file_name)
             self.model_head.load_state_dict(checkpoint['model'])
 

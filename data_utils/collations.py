@@ -32,7 +32,7 @@ def list_segments_points(p_coord, p_feats, labels):
 
             c_coord.append(segment_coord)
             c_feats.append(segment_feats)
-    
+
     seg_coord = torch.vstack(c_coord)
     seg_feats = torch.vstack(c_feats)
 
@@ -48,22 +48,23 @@ def numpy_to_sparse_tensor(p_coord, p_feats, p_label=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     p_coord = ME.utils.batched_coordinates(array_to_sequence(p_coord), dtype=torch.float32)
     p_feats = ME.utils.batched_coordinates(array_to_torch_sequence(p_feats), dtype=torch.float32)[:, 1:]
+
     if p_label is not None:
         p_label = ME.utils.batched_coordinates(array_to_torch_sequence(p_label), dtype=torch.float32)[:, 1:]
+    
         return ME.SparseTensor(
                 features=p_feats,
                 coordinates=p_coord,
                 device=device,
             ), p_label.cuda()
-    
+
     return ME.SparseTensor(
                 features=p_feats,
                 coordinates=p_coord,
                 device=device,
             )
 
-
-def point_set_to_coord_feats_idx(point_set, labels, idx, resolution, num_points, deterministic=False):
+def point_set_to_coord_feats(point_set, labels, resolution, num_points, deterministic=False):
     p_feats = point_set.copy()
     p_coord = np.round(point_set[:, :3] / resolution)
     p_coord -= p_coord.min(0, keepdims=1)
@@ -74,20 +75,8 @@ def point_set_to_coord_feats_idx(point_set, labels, idx, resolution, num_points,
             # for reproducibility we set the seed
             np.random.seed(42)
         mapping = np.random.choice(mapping, num_points, replace=False)
-    return p_coord[mapping], p_feats[mapping], labels[mapping], idx[mapping]
 
-def point_set_to_coord_feats(point_set, labels, resolution, num_points, deterministic=False):
-    p_feats = point_set.copy()
-    p_coord = np.round(point_set[:, :3] / resolution)
-    p_coord -= p_coord.min(0, keepdims=1)
-
-    _, mapping, inverse = ME.utils.sparse_quantize(coordinates=p_coord, return_index=True, return_inverse=True)
-    if len(mapping) > num_points:
-        if deterministic:
-            # for reproducibility we set the seed
-            np.random.seed(42)
-        mapping = np.random.choice(mapping, num_points, replace=False)
-    return p_coord[mapping], p_feats[mapping], labels[mapping], inverse.numpy()
+    return p_coord[mapping], p_feats[mapping], labels[mapping]
 
 def collate_points_to_sparse_tensor(pi_coord, pi_feats, pj_coord, pj_feats):
     # voxelize on a sparse tensor
@@ -98,74 +87,42 @@ def collate_points_to_sparse_tensor(pi_coord, pi_feats, pj_coord, pj_feats):
 
 
 class SparseAugmentedCollation:
-    def __init__(self, resolution, num_points=80000):
+    def __init__(self, resolution, num_points=80000, segment_contrast=False):
         self.resolution = resolution
         self.num_points = num_points
+        self.segment_contrast = segment_contrast
 
     def __call__(self, list_data):
-        points_i, points_j, pc_i, pc_j = list(zip(*list_data))
-        pc_i = np.asarray(pc_i)
-        pc_j = np.asarray(pc_j)
+        points_i, points_j = list(zip(*list_data))
 
-
-        pci_coord = []
-        pci_feats = []
-        pci_inverse = []
-        
-        pcj_coord = []
-        pcj_feats = []
-        pcj_inverse = []
-        
-        for pi, pj in zip(pc_i, pc_j):
-            # pi[:,:-1] will be the points and intensity values, and the labels will be the cluster ids
-            coord_pi, feats_pi, _, inverse_pi = point_set_to_coord_feats(pi[:,:3], pi[:,3], self.resolution, pi.shape[0])
-            pci_coord.append(coord_pi)
-            pci_feats.append(coord_pi)
-            pci_inverse.append(inverse_pi)
-            # pj[:,:-1] will be the points and intensity values, and the labels will be the cluster ids
-            coord_pj, feats_pj, _, inverse_pj = point_set_to_coord_feats(pj[:,:3], pj[:,3], self.resolution, pi.shape[0])
-            pcj_coord.append(coord_pj)
-            pcj_feats.append(coord_pj)
-            pcj_inverse.append(inverse_pj)
-            
-
-        pci_coord = np.asarray(pci_coord)
-        pci_feats = np.asarray(pci_feats)
-        pci_inverse = np.asarray(pci_inverse)
-        
-        pcj_coord = np.asarray(pcj_coord)
-        pcj_feats = np.asarray(pcj_feats)
-        pcj_inverse = np.asarray(pcj_inverse)
-        
         points_i = np.asarray(points_i)
         points_j = np.asarray(points_j)
 
         pi_feats = []
         pi_coord = []
         pi_cluster = []
-        pi_idx = []
-        
+
         pj_feats = []
         pj_coord = []
         pj_cluster = []
-        pj_idx = []
 
         for pi, pj in zip(points_i, points_j):
             # pi[:,:-1] will be the points and intensity values, and the labels will be the cluster ids
-            coord_pi, feats_pi, cluster_pi, idx_i = point_set_to_coord_feats_idx(pi[:,:3], pi[:,3], pi[:,4], self.resolution, self.num_points)
+            coord_pi, feats_pi, cluster_pi = point_set_to_coord_feats(pi[:,:-1], pi[:,-1], self.resolution, self.num_points)
             pi_coord.append(coord_pi)
             pi_feats.append(feats_pi)
-            pi_idx.append(idx_i)
+
             # pj[:,:-1] will be the points and intensity values, and the labels will be the cluster ids
-            coord_pj, feats_pj, cluster_pj, idx_j = point_set_to_coord_feats_idx(pj[:,:3], pj[:,3], pj[:,4], self.resolution, self.num_points)
+            coord_pj, feats_pj, cluster_pj = point_set_to_coord_feats(pj[:,:-1], pj[:,-1], self.resolution, self.num_points)
             pj_coord.append(coord_pj)
             pj_feats.append(feats_pj)
-            pj_idx.append(idx_j)
-            
+
             cluster_pi, cluster_pj = overlap_clusters(cluster_pi, cluster_pj)
 
-            pi_cluster.append(cluster_pi)
-            pj_cluster.append(cluster_pj)
+            if self.segment_contrast:
+                # we store the segment labels per point
+                pi_cluster.append(cluster_pi)
+                pj_cluster.append(cluster_pj)
 
         pi_feats = np.asarray(pi_feats)
         pi_coord = np.asarray(pi_coord)
@@ -176,9 +133,8 @@ class SparseAugmentedCollation:
         segment_i = np.asarray(pi_cluster)
         segment_j = np.asarray(pj_cluster)
 
-        pi_idx = np.asarray(pi_idx)
-        pj_idx = np.asarray(pj_idx)
-        return (pi_coord, pi_feats, segment_i, pi_idx), (pj_coord, pj_feats, segment_j, pj_idx), (pci_coord, pci_feats, pci_inverse), (pcj_coord, pcj_feats, pcj_inverse)
+        # if not segment_contrast segment_i and segment_j will be an empty list
+        return (pi_coord, pi_feats, segment_i), (pj_coord, pj_feats, segment_j)
 
 class SparseCollation:
     def __init__(self, resolution, num_points=80000):
@@ -195,8 +151,8 @@ class SparseCollation:
         p_coord = []
         p_label = []
         for points, label in zip(points_set, labels):
-            coord, feats, label_, _ = point_set_to_coord_feats(points, label, self.resolution, self.num_points, True)
-            p_feats.append(feats)                         
+            coord, feats, label_ = point_set_to_coord_feats(points, label, self.resolution, self.num_points, True)
+            p_feats.append(feats)
             p_coord.append(coord)
             p_label.append(label_)
 

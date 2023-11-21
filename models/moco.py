@@ -16,47 +16,36 @@ latent_features = {
     'MinkUNet50': 2048,
     'MinkUNet101': 2048,
 }
-#
+
 class MoCo(nn.Module):
-    def __init__(self, model, model_head, model_classifier, dtype, args, K=65536, T=0.1):
+    def __init__(self, model, model_head, dtype, args, K=65536, m=0.999, T=0.1):
         super(MoCo, self).__init__()
-        self.args = args
+
         self.K = K
+        self.m = m
         self.T = T
-        self.model_q = model(in_channels=4 if self.args.use_intensity else 3, out_channels=latent_features[self.args.sparse_model])#.type(dtype)
-        self.head_q = model_head(in_channels=latent_features[self.args.sparse_model], out_channels=self.args.feature_size)#.type(dtype)
-        self.classifier_q = model_classifier(in_channels=latent_features[self.args.sparse_model], out_channels=self.args.num_classes)#.type(dtype)
-        
-        self.model_k = model(in_channels=4 if self.args.use_intensity else 3, out_channels=latent_features[self.args.sparse_model])#.type(dtype)
-        self.head_k = model_head(in_channels=latent_features[self.args.sparse_model], out_channels=self.args.feature_size)#.type(dtype)
-        self.classifier_k = model_classifier(in_channels=latent_features[self.args.sparse_model], out_channels=self.args.num_classes)#.type(dtype)
+
+        self.model_q = model(in_channels=4 if args.use_intensity else 3, out_channels=latent_features[args.sparse_model])#.type(dtype)
+        self.head_q = model_head(in_channels=latent_features[args.sparse_model], out_channels=args.feature_size)#.type(dtype)
+
+        self.model_k = model(in_channels=4 if args.use_intensity else 3, out_channels=latent_features[args.sparse_model])#.type(dtype)
+        self.head_k = model_head(in_channels=latent_features[args.sparse_model], out_channels=args.feature_size)#.type(dtype)
 
         # initialize model k and q
         for param_q, param_k in zip(self.model_q.parameters(), self.model_k.parameters()):
             param_k.data.copy_(param_q.data)
-            # param_k.requires_grad = True
-            param_q.requires_grad = False
+            param_k.requires_grad = False
 
         # initialize headection head k and q
         for param_q, param_k in zip(self.head_q.parameters(), self.head_k.parameters()):
             param_k.data.copy_(param_q.data)
-            # param_k.requires_grad = True
-            param_q.requires_grad = False
+            param_k.requires_grad = False
 
-        # initialize classifier head k and q
-        for param_q, param_k in zip(self.classifier_q.parameters(), self.classifier_k.parameters()):
-            param_k.data.copy_(param_q.data)
-            # param_k.requires_grad = True
-            param_q.requires_grad = False
-
-        self.register_buffer('queue_pcd', torch.randn(self.args.feature_size,K))
+        self.register_buffer('queue_pcd', torch.randn(args.feature_size,K))
         self.queue_pcd = nn.functional.normalize(self.queue_pcd, dim=0)
 
-        self.register_buffer('queue_seg', torch.randn(self.args.feature_size,K))
+        self.register_buffer('queue_seg', torch.randn(args.feature_size,K))
         self.queue_seg = nn.functional.normalize(self.queue_seg, dim=0)
-
-        self.register_buffer('queue_seg_psl', torch.tensor(np.ones((1,K))*(-1)))
-
 
         self.register_buffer("queue_pcd_ptr", torch.zeros(1, dtype=torch.long))
         self.register_buffer("queue_seg_ptr", torch.zeros(1, dtype=torch.long))
@@ -64,12 +53,20 @@ class MoCo(nn.Module):
         if torch.cuda.device_count() > 1:
             self.model_q = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.model_q)
             self.head_q = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.head_q)
-            self.classifier_q = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.classifier_q)
 
             self.model_k = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.model_k)
             self.head_k = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.head_k)
-            self.classifier_k = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.classifier_k)
 
+    @torch.no_grad()
+    def _momentum_update_key_encoder(self):
+        """
+        Momentum update of the key encoder
+        """
+        for param_q, param_k in zip(self.model_q.parameters(), self.model_k.parameters()):
+            param_k.data = param_k.data * self.m + param_q.data * (1. - self.m)
+
+        for param_q, param_k in zip(self.head_q.parameters(), self.head_k.parameters()):
+            param_k.data = param_k.data * self.m + param_q.data * (1. - self.m)
 
     @torch.no_grad()
     def _dequeue_and_enqueue_pcd(self, keys):
@@ -96,8 +93,7 @@ class MoCo(nn.Module):
         self.queue_pcd_ptr[0] = ptr
 
     @torch.no_grad()
-    def _dequeue_and_enqueue_seg(self, keys, keys_psl=None):
-
+    def _dequeue_and_enqueue_seg(self, keys):
         # gather keys before updating queue
         if torch.cuda.device_count() > 1:
             # similar to shuffling, since for each gpu the number of segments may not be the same
@@ -128,29 +124,13 @@ class MoCo(nn.Module):
         #assert self.K % batch_size == 0  # for simplicity
 
         # replace the keys at ptr (dequeue and enqueue)
-        if keys_psl == None:
-            if ptr + batch_size <= self.K:
-                self.queue_seg[:, ptr:ptr + batch_size] = keys.T
-            else:
-                tail_size = self.K - ptr
-                head_size = batch_size - tail_size
-                self.queue_seg[:, ptr:self.K] = keys.T[:, :tail_size]
-                self.queue_seg[:, :head_size] = keys.T[:, tail_size:]
+        if ptr + batch_size <= self.K:
+            self.queue_seg[:, ptr:ptr + batch_size] = keys.T
         else:
-            if ptr + batch_size <= self.K:
-                self.queue_seg[:, ptr:ptr + batch_size] = keys.T
-                self.queue_seg_psl[:, ptr:ptr + batch_size] = keys_psl
-            else:
-                tail_size = self.K - ptr
-                head_size = batch_size - tail_size
-                self.queue_seg[:, ptr:self.K] = keys.T[:, :tail_size]
-                self.queue_seg[:, :head_size] = keys.T[:, tail_size:]
-                self.queue_seg_psl[:, ptr:self.K] = keys_psl[:tail_size]
-                self.queue_seg_psl[:, :head_size] = keys_psl[tail_size:]
-
-
-
-
+            tail_size = self.K - ptr
+            head_size = batch_size - tail_size
+            self.queue_seg[:, ptr:self.K] = keys.T[:, :tail_size]
+            self.queue_seg[:, :head_size] = keys.T[:, tail_size:]
 
         ptr = (ptr + batch_size) % self.K  # move pointer
 
@@ -163,7 +143,6 @@ class MoCo(nn.Module):
         *** Only support DistributedDataParallel (DDP) model. ***
         """
         # gather from all gpus
-
         batch_size = []
 
         # sparse tensor should be decomposed
@@ -238,7 +217,6 @@ class MoCo(nn.Module):
         *** Only support DistributedDataParallel (DDP) model. ***
         """
         # gather from all gpus
-
         batch_size = []
 
         # sparse tensor should be decomposed
@@ -296,7 +274,7 @@ class MoCo(nn.Module):
 
         return x_this
 
-    def forward(self, pcd_q, pcd_k, segments=None, psls=None):
+    def forward(self, pcd_q, pcd_k, segments=None):
         """
         Input:
             pcd_q: a batch of query pcds
@@ -304,87 +282,87 @@ class MoCo(nn.Module):
         Output:
             logits, targets
         """
-        with torch.no_grad():
+
         # compute query features
-            h_q = self.model_q(pcd_q)  # queries: NxC
-            if segments is None:
-                pred_q = self.classifier_q(h_q)
-            else:
-                # coord and feat in the shape N*SxPx3 and N*SxPxF
-                # where N is the batch size and S is the number of segments in each scan
-                h_qs = list_segments_points(h_q.C, h_q.F, np.asarray(segments[0]))
-    
-                z_qs = self.head_q(h_qs)
-                q_seg = nn.functional.normalize(z_qs, dim=1)
-        # compute key features
-
-        # shuffle for making use of BN
-        #if torch.cuda.device_count() > 1:
-        #    pcd_k, idx_unshuffle = self._batch_shuffle_ddp(pcd_k)
-
-        # many Batch Normalization operations we shuffle before it to have shuffle BN
-        h_k = self.model_k(pcd_k)  # keys: NxC
-        
-        # IMPORTANT: in the projection head we dont have batch normalization, so unshuffling before
-        # passing over the proj head will maintain the shuffle BN chracteristics
-        #if torch.cuda.device_count() > 1:
-        #    h_k = self._batch_unshuffle_ddp(h_k, idx_unshuffle)
+        h_q = self.model_q(pcd_q)  # queries: NxC
 
         if segments is None:
-            pred_k = self.classifier_k(h_k)
-            return pred_q, pred_k
+            z_q = self.head_q(h_q)
+            q_pcd = nn.functional.normalize(z_q, dim=1)
         else:
             # coord and feat in the shape N*SxPx3 and N*SxPxF
             # where N is the batch size and S is the number of segments in each scan
+            h_qs = list_segments_points(h_q.C, h_q.F, segments[0])
 
-            h_ks = list_segments_points(h_k.C, h_k.F, np.asarray(segments[1]))
+            z_qs = self.head_q(h_qs)
+            q_seg = nn.functional.normalize(z_qs, dim=1)
 
-            z_ks = self.head_k(h_ks)
-            k_seg = nn.functional.normalize(z_ks, dim=1)
-            
-            l_pos_seg = torch.einsum('nc,nc->n', [q_seg, k_seg]).unsqueeze(-1)
-            
-############################################################
-        if self.args.psl_sup != "None":
-            if len(np.unique(psls[0].numpy())) > 1:
-                l_neg_seg = []
-                l_pos_seg_i = []
-                for i in np.unique(psls[0].numpy()):
-                    neg_bank_ci = self.queue_seg.clone().detach()[:,np.argwhere((self.queue_seg_psl!=i)[0].cpu().numpy()).squeeze()]
-                    q_seg_ci = q_seg[np.argwhere(psls[0]!=i).cpu().numpy().squeeze(),:]
-                    l_pos_seg_i.append(l_pos_seg[np.argwhere(psls[0]!=i).cpu().numpy().squeeze(),:])
-                    if len(q_seg_ci.shape) > 1:
-                        l_neg_seg.append(torch.einsum('nc,ck->nk', [q_seg_ci, neg_bank_ci]))
-                    else:
-                        l_neg_seg.append(torch.einsum('nc,ck->nk', [torch.unsqueeze(q_seg_ci,0), neg_bank_ci]))
-            
-                min_shape = min(arr.shape[1] for arr in l_neg_seg)
-                l_neg_seg1 = []
-                for tensor in l_neg_seg:
-                    l_neg_seg1.append(tensor[:,:min_shape])
-                l_neg_seg = torch.vstack(l_neg_seg1)
-                l_pos_seg = torch.vstack(l_pos_seg_i)
-            
+        # compute key features
+        with torch.no_grad():  # no gradient to keys
+            self._momentum_update_key_encoder()  # update the key encoder
+
+            # shuffle for making use of BN
+            #if torch.cuda.device_count() > 1:
+            #    pcd_k, idx_unshuffle = self._batch_shuffle_ddp(pcd_k)
+
+            # many Batch Normalization operations we shuffle before it to have shuffle BN
+            h_k = self.model_k(pcd_k)  # keys: NxC
+
+            # IMPORTANT: in the projection head we dont have batch normalization, so unshuffling before
+            # passing over the proj head will maintain the shuffle BN chracteristics
+            #if torch.cuda.device_count() > 1:
+            #    h_k = self._batch_unshuffle_ddp(h_k, idx_unshuffle)
+
+            if segments is None:
+                z_k = self.head_k(h_k)
+                k_pcd = nn.functional.normalize(z_k, dim=1)
             else:
-                l_neg_seg = torch.einsum('nc,ck->nk', [q_seg, self.queue_seg.clone().detach()])
+                # coord and feat in the shape N*SxPx3 and N*SxPxF
+                # where N is the batch size and S is the number of segments in each scan
+                h_ks = list_segments_points(h_k.C, h_k.F, segments[1])
+
+                z_ks = self.head_k(h_ks)
+                k_seg = nn.functional.normalize(z_ks, dim=1)
+
+        if segments is None:
+            # compute logits
+            # Einstein sum is more intuitive
+            # positive logits: Nx1
+            l_pos_pcd = torch.einsum('nc,nc->n', [q_pcd, k_pcd]).unsqueeze(-1)
+            # negative logits: NxK
+            l_neg_pcd = torch.einsum('nc,ck->nk', [q_pcd, self.queue_pcd.clone().detach()])
+
+            # logits: Nx(1+K)
+            logits_pcd = torch.cat([l_pos_pcd, l_neg_pcd], dim=1)
+
+            # apply temperature
+            logits_pcd /= self.T
+
+            # labels: positive key indicators
+            labels_pcd = torch.zeros(logits_pcd.shape[0], dtype=torch.long).cuda()
+
             # dequeue and enqueue
-            self._dequeue_and_enqueue_seg(k_seg, psls[1])
+            self._dequeue_and_enqueue_pcd(k_pcd)
+
+            return logits_pcd, labels_pcd
         else:
+            l_pos_seg = torch.einsum('nc,nc->n', [q_seg, k_seg]).unsqueeze(-1)
             # negative logits: NxK
             l_neg_seg = torch.einsum('nc,ck->nk', [q_seg, self.queue_seg.clone().detach()])
+
+            # logits: Nx(1+K)
+            logits_seg = torch.cat([l_pos_seg, l_neg_seg], dim=1)
+
+            # apply temperature
+            logits_seg /= self.T
+
+            # labels: positive key indicators
+            labels_seg = torch.zeros(logits_seg.shape[0], dtype=torch.long).cuda()
+
             # dequeue and enqueue
             self._dequeue_and_enqueue_seg(k_seg)
 
-#######################################################################
-            # logits: Nx(1+K)
-        logits_seg = torch.cat([l_pos_seg, l_neg_seg], dim=1)
-
-        # apply temperature
-        logits_seg /= self.T
-        # labels: positive key indicators
-        labels_seg = torch.zeros(logits_seg.shape[0], dtype=torch.long).cuda()
-        # return logits_seg, labels_seg
-        return logits_seg, labels_seg
+            return logits_seg, labels_seg
 
 @torch.no_grad()
 def concat_all_gather(tensor):

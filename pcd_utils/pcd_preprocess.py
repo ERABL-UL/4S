@@ -42,9 +42,9 @@ def clusters_hdbscan(points_set, n_clusters):
 
     return labels
 
-def clusters_from_pcd(pcd, n_clusters, eps, min_points):
+def clusters_from_pcd(pcd, n_clusters):
     # clusterize pcd points
-    labels = np.array(pcd.cluster_dbscan(eps=eps, min_points=min_points))
+    labels = np.array(pcd.cluster_dbscan(eps=0.25, min_points=10))
     lbls, counts = np.unique(labels, return_counts=True)
     cluster_info = np.array(list(zip(lbls[1:], counts[1:])))
     cluster_info = cluster_info[cluster_info[:,1].argsort()]

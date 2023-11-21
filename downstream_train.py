@@ -13,11 +13,11 @@ if __name__ == "__main__":
 
     parser.add_argument('--dataset-name', type=str, default='SemanticKITTI',
                         help='Name of dataset (default: SemanticKITTI')
-    parser.add_argument('--data-dir', type=str, default='/home/reza/PHD/Data/KITTI360/fps_knn',
+    parser.add_argument('--data-dir', type=str, default='./Datasets/SemanticKITTI',
                         help='Path to dataset (default: ./Datasets/SemanticKITTI')
-    parser.add_argument('--batch-size', type=int, default=1, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=4, metavar='N',
                         help='input training batch-size')
-    parser.add_argument('--epochs', type=int, default=1, metavar='N',
+    parser.add_argument('--epochs', type=int, default=15, metavar='N',
                         help='number of training epochs (default: 15)')
     parser.add_argument('--lr', type=float, default=2.4e-1,
                         help='learning rate (default: 2.4e-1')
@@ -25,11 +25,9 @@ if __name__ == "__main__":
                         help='Learning rate decay (default: 1e-4')
     parser.add_argument('--tau', default=0.1, type=float,
                         help='Tau temperature smoothing (default 0.1)')
-    parser.add_argument('--log-dir', type=str, default='checkpoint/contrastive',
+    parser.add_argument('--log-dir', type=str, default='checkpoint/downstream_task',
                         help='logging directory (default: checkpoint/downstream_task)')
-    parser.add_argument('--checkpoint-epoch', type=str, default='lastepoch199',
-                    help='getting the checkpoint related to the epoch (default: lastepoch199)')
-    parser.add_argument('--checkpoint', type=str, default='segment_contrast_1p0',
+    parser.add_argument('--checkpoint', type=str, default='classifier_checkpoint',
                         help='model checkpoint (default: classifier_checkpoint)')
     parser.add_argument('--use-cuda', action='store_true', default=False,
                         help='using cuda (default: True')
@@ -51,7 +49,7 @@ if __name__ == "__main__":
                         help='load checkpoint (default: True')
     parser.add_argument('--use-intensity', action='store_true', default=False,
                         help='use points intensity (default: False')
-    parser.add_argument('--contrastive', action='store_true', default=True,
+    parser.add_argument('--contrastive', action='store_true', default=False,
                         help='use contrastive pre-trained weights (default: False')
     parser.add_argument('--accum-steps', type=int, default=1,
                         help='Number steps to accumulate gradient')

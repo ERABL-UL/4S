@@ -18,7 +18,7 @@ data_loaders = {
 }
 
 data_class = {
-    'SemanticKITTI': 7,
+    'SemanticKITTI': 20,
     'SemanticPOSS': 14,
 }
 
@@ -34,7 +34,7 @@ def list_parameters(models):
 
     return optim_params
 
-def get_model(args, dtype):
+def get_model(args, dtype, pre_training=False):
     return sparse_models[args.sparse_model](
         in_channels=4 if args.use_intensity else 3,
         out_channels=latent_features[args.sparse_model],
@@ -44,9 +44,7 @@ def get_projection_head(args, dtype):
     return ProjectionHead(in_channels=latent_features[args.sparse_model], out_channels=args.feature_size)#.type(dtype)
 
 def get_moco_model(args, dtype):
-    return MoCo(sparse_models[args.sparse_model], ProjectionHead, SegmentationClassifierHead, dtype, args)
-    # return MoCo(sparse_models[args.sparse_model], ProjectionHead, dtype, args)
-
+    return MoCo(sparse_models[args.sparse_model], ProjectionHead, dtype, args)
 
 def get_classifier_head(args, dtype):
     if 'UNet' in args.sparse_model:
@@ -78,24 +76,28 @@ def get_class_weights(dataset):
 def write_summary(writer, summary_id, report, epoch):
     writer.add_scalar(summary_id, report, epoch)
 
-def get_dataset(args):
-    data_train = data_loaders[args.dataset_name](root=args.data_dir, split='train', intensity_channel=args.use_intensity,
-                                                 segment_augment=True, resolution=args.sparse_resolution)
-    data_test = data_loaders[args.dataset_name](root=args.data_dir, split='validation', segment_augment=False, 
-                                                    intensity_channel=args.use_intensity, resolution=args.sparse_resolution)
+def get_dataset(args, pre_training=True):
+    percent_labels = 1.0 if pre_training else args.percentage_labels
+    segment_contrast = False if not pre_training else args.segment_contrast
+    data_train = data_loaders[args.dataset_name](root=args.data_dir, split='train', percentage=percent_labels, 
+                                                    intensity_channel=args.use_intensity, pre_training=pre_training, resolution=args.sparse_resolution)
+    data_test = data_loaders[args.dataset_name](root=args.data_dir, split='validation', percentage=percent_labels, 
+                                                    intensity_channel=args.use_intensity, pre_training=pre_training, resolution=args.sparse_resolution)
 
     return data_train, data_test
 
-def get_data_loader(data_train, data_test, args):
+def get_data_loader(data_train, data_test, args, pre_training=True):
     collate_fn = None
 
-    collate_fn_train = SparseAugmentedCollation(args.sparse_resolution, args.num_points)
-    collate_fn_test = SparseCollation(args.sparse_resolution, args.num_points)
+    if pre_training:
+        collate_fn = SparseAugmentedCollation(args.sparse_resolution, args.num_points, args.segment_contrast)
+    else:
+        collate_fn = SparseCollation(args.sparse_resolution, args.num_points)
 
     train_loader = torch.utils.data.DataLoader(
         data_train,
         batch_size=args.batch_size,
-        collate_fn=collate_fn_train,
+        collate_fn=collate_fn,
         shuffle=True,
         num_workers=0
     )
@@ -103,7 +105,7 @@ def get_data_loader(data_train, data_test, args):
     test_loader = torch.utils.data.DataLoader(
         data_test,
         batch_size=args.batch_size,
-        collate_fn=collate_fn_test,
+        collate_fn=collate_fn,
         shuffle=True,
         num_workers=0
     )
