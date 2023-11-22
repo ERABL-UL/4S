@@ -10,3 +10,10 @@ Build docker image
 docker build -t vicregl -f docker/Dockerfile .
 ```
 
+Notes
+```bash
+pip install -U torch
+pip install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --no-deps
+pip install -U setuptools
+```
+
