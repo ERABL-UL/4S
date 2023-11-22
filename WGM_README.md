@@ -2,7 +2,7 @@
 
 Setup devcontainer
 ```bash
-ln -s .devcontainer/devcontainer.json.linux .devcontainer/devcontainer.json
+cp .devcontainer/devcontainer.json.linux .devcontainer/devcontainer.json
 ```
 
 Build docker image
