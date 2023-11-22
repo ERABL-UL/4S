@@ -10,6 +10,11 @@ Build docker image
 docker build -t vicregl -f docker/Dockerfile .
 ```
 
+Dataset
+```bash
+ln -s Datasets/SemanticKITTI Datasets/SemanticKITTI
+```
+
 Notes
 ```bash
 pip install -U torch

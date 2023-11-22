@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install \
+    scikit-learn \
     matplotlib==3.3.4 \
     numpy==1.20.1 \
     open3d==0.12.0 \
@@ -28,9 +29,10 @@ RUN pip3 install \
     h5py==3.6.0 \ 
     ninja==1.10.2.3 \
     protobuf==3.20.3 \
+    pandas==1.3.0 \
     hdbscan
 
-#RUN pip3 install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --no-deps
+# RUN pip3 install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --no-deps
 
 RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/v1.1.1/zsh-in-docker.sh)" -- -t gentoo
 CMD ["zsh"]
