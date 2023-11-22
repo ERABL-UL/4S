@@ -27,6 +27,7 @@ RUN pip3 install \
     tqdm==4.56.2 \
     h5py==3.6.0 \ 
     ninja==1.10.2.3 \
+    protobuf==3.20.3 \
     hdbscan
 
 #RUN pip3 install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --no-deps
