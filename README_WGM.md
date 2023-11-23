@@ -22,6 +22,9 @@ pip3 install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --n
 
 Notes
 ```bash
+./Datasets/SemanticKITTI/dataset/sequences/00/velodyne
+
+
 pip install -U torch
 pip install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --no-deps
 pip install -U setuptools

@@ -1,0 +1,42 @@
+{
+	"name": "ros2",
+	"build": {
+		"context": "..",
+		"dockerfile": "../docker/Dockerfile"
+	},
+	"workspaceFolder": "/workspaces/4S",
+	"workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/4S,type=bind",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"ms-toolsai.jupyter",
+				"ms-python.isort",
+				"ms-python.vscode-pylance",
+				"ms-python.gather",
+				"ms-python.autopep8",
+				"ms-python.debugpy",
+				"ms-vscode.cpptools-extension-pack",
+				"GitHub.copilot",
+				"GitHub.copilot-chat"
+			]
+		}
+	},
+	"mounts": [
+		"source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+		"source=/dev/shm,target=/dev/shm,type=bind",
+		"type=bind,source=/home/${localEnv:USER}/.ssh,target=/root/.ssh,readonly",
+		"type=bind,source=/home/${localEnv:USER}/Datasets,target=/root/workspaces/4S/Datasets,readonly"
+	],
+	"containerEnv": {
+		"DISPLAY": ":1",
+		"NVIDIA_VISIBLE_DEVICES": "all",
+		"NVIDIA_DRIVER_CAPABILITIES": "all"
+	},
+	"runArgs": [
+		"--ipc=host",
+		"--pid=host",
+		"--net=host"
+	],
+	"postCreateCommand": ""
+}
