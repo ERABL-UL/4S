@@ -32,7 +32,7 @@ RUN pip3 install \
     pandas==1.3.0 \
     hdbscan
 
-RUN pip3 install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --no-deps
+# RUN pip3 install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --no-deps
 
 RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/v1.1.1/zsh-in-docker.sh)" -- -t gentoo
 CMD ["zsh"]
