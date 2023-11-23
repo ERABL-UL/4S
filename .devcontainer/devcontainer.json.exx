@@ -26,7 +26,7 @@
 		"source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
 		"source=/dev/shm,target=/dev/shm,type=bind",
 		"type=bind,source=/home/${localEnv:USER}/.ssh,target=/root/.ssh,readonly",
-		"type=bind,source=/data/SemanticKITTI,target=/root/workspaces/4S/Datasets/SemanticKITTI,readonly"
+		"type=bind,source=/data/SemanticKITTI,target=/workspaces/4S/Datasets/SemanticKITTI,readonly"
 	],
 	"containerEnv": {
 		"DISPLAY": ":1",
