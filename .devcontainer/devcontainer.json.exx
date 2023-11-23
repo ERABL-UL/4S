@@ -1,5 +1,5 @@
 {
-	"name": "ros2",
+	"name": "vicreg",
 	"build": {
 		"context": "..",
 		"dockerfile": "../docker/Dockerfile"

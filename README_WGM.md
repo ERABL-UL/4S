@@ -1,32 +1,25 @@
 # VICRegL + Point Clouds
 
+## Installation
 Setup devcontainer
 ```bash
-cp .devcontainer/devcontainer.json.linux .devcontainer/devcontainer.json
+cp .devcontainer/devcontainer.json.turing .devcontainer/devcontainer.json
 ```
 
-Build docker image
+## Training
 ```bash
+# TODO make script to run training without devcontainer
 docker build -t vicregl -f docker/Dockerfile .
-```
 
-Dataset
-```bash
-ln -s Datasets/SemanticKITTI Datasets/SemanticKITTI
-```
+CUDA_VISIBLE_DEVICES=all  # or `0,1` for specific GPUs, will be automatically set by SLURM
 
-Running
-```bash
+# TODO try -v host:container:ro,delegated for volumes
+# TODO need to run the following command in the container
 pip3 install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --no-deps
+
+docker run --gpus all -e CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES --rm -it \
+  --mount type=bind,source=/dev/shm,target=/dev/shm \
+  --mount type=bind,source=$(pwd),target=/app/ \
+  --mount type=bind,source=/home/william/Datasets,target=/app/Datasets \
+  vicregl python3 contrastive_train.py --use-cuda --use-intensity --segment-contrast --checkpoint segcontrast
 ```
-
-Notes
-```bash
-./Datasets/SemanticKITTI/dataset/sequences/00/velodyne
-
-
-pip install -U torch
-pip install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --no-deps
-pip install -U setuptools
-```
-
