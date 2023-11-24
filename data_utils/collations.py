@@ -45,6 +45,7 @@ def list_segments_points(p_coord, p_feats, labels):
             )
 
 
+# TODO keep the batch dimension
 def list_segments_points_batch(p_coord, p_feats, labels):
     """
     Same as `list_segments_points_batch`, but keep the batch dimension
