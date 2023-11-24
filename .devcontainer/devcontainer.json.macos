@@ -1,0 +1,40 @@
+{
+	"name": "vicreg",
+	"build": {
+		"context": "..",
+		"dockerfile": "../docker/DockerfileMacos"
+	},
+	"workspaceFolder": "/workspaces/4S",
+	"workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/4S,type=bind",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"ms-toolsai.jupyter",
+				"ms-python.isort",
+				"ms-python.vscode-pylance",
+				"ms-python.gather",
+				"ms-python.autopep8",
+				"ms-python.debugpy",
+				"ms-vscode.cpptools-extension-pack",
+				"GitHub.copilot",
+				"GitHub.copilot-chat"
+			]
+		}
+	},
+	"mounts": [
+		"source=/dev/shm,target=/dev/shm,type=bind",
+		"type=bind,source=/home/${localEnv:USER}/.ssh,target=/root/.ssh,readonly",
+	],
+	"containerEnv": {
+		"DISPLAY": ":1",
+		"NVIDIA_VISIBLE_DEVICES": "all",
+		"NVIDIA_DRIVER_CAPABILITIES": "all"
+	},
+	"runArgs": [
+		"--ipc=host",
+		"--pid=host",
+		"--net=host"
+	],
+	"postCreateCommand": ""
+}
