@@ -256,7 +256,7 @@ if __name__ == "__main__":
 
 
 
-    best_epoch = "lastepoch9"
+    best_epoch = "epoch0"
     checkpoints = ["lastepoch119"]
     set_deterministic()
     # for best_epoch in best_epochs:

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from data_utils.collations import *
+from pcd_utils.segment_process import pc_to_segment_pure
 
 latent_features = {
     'SparseResNet14': 512,
@@ -23,6 +24,8 @@ class MoCo(nn.Module):
         self.args = args
         self.K = K
         self.T = T
+        self.num_points = self.args.num_points
+        self.resolution = self.args.sparse_resolution
         self.model_q = model(in_channels=4 if self.args.use_intensity else 3, out_channels=latent_features[self.args.sparse_model])#.type(dtype)
         self.head_q = model_head(in_channels=latent_features[self.args.sparse_model], out_channels=self.args.feature_size)#.type(dtype)
         self.classifier_q = model_classifier(in_channels=latent_features[self.args.sparse_model], out_channels=self.args.num_classes)#.type(dtype)
@@ -296,7 +299,76 @@ class MoCo(nn.Module):
 
         return x_this
 
-    def forward(self, pcd_q, pcd_k, segments=None, psls=None):
+
+    @torch.no_grad()
+    def _EMA_teacher_update(self, alpha=0.99999):
+        """
+        Momentum update of the teacher
+        """
+        for param_q, param_k in zip(self.model_q.parameters(), self.model_k.parameters()):
+            param_q.data = param_q.data * alpha + param_k.data * (1. - alpha)
+
+        for param_q, param_k in zip(self.head_q.parameters(), self.head_k.parameters()):
+            param_q.data = param_q.data * alpha + param_k.data * (1. - alpha)
+
+        for param_q, param_k in zip(self.classifier_q.parameters(), self.classifier_k.parameters()):
+            param_q.data = param_q.data * alpha + param_k.data * (1. - alpha)
+            
+    @torch.no_grad()
+    def psl_selection(self, ps_l_conf, ps_l):
+        conf = [0, 0.959, 0.844, 0.672, 0.933, 0.409, 0.879]
+        ind = []
+        for _class in np.unique(ps_l):
+            class_ind = ps_l == _class
+            _class_ind = np.argwhere(class_ind==True)
+            ind_true = ps_l_conf[class_ind][:,_class] > conf[_class]
+            ind.append((_class_ind[ind_true])[:,0])
+        ind = np.hstack(ind)
+        np.sort(ind)
+   
+        return ind
+    
+    @torch.no_grad()
+    def segment_purification(self,  x_coord, x_feats, s, idx, ps_l):
+        ps_l_idx = np.c_[np.asarray(ps_l.cpu()),np.asarray(range(ps_l.shape[0]))]
+
+        coord_t = []
+        feats_t = []
+        s_t = []
+        psl = []
+        for pc_idx in range(x_coord.shape[0]):
+            ps_l_i = ps_l_idx[np.int32(idx[pc_idx])]
+            pc = np.c_[x_coord[pc_idx], x_feats[pc_idx], ps_l_i,s[pc_idx]]          
+            pc = np.c_[pc[:,:7],pc[:,8:]]
+            unique, count = np.unique(pc[:,7], return_counts=True)
+            pc1 = pc[pc[:, 7].argsort()]
+            a = count[0]
+            pc3 = []
+            pc3.append(pc1[:count[0]])
+            for i in range(1,unique.shape[0]):
+                unique_seg, count_seg = np.unique(pc1[a:count[i]+a,6], return_counts=True)
+                if self.params.psl_sup != "psl":
+                    if unique_seg.shape[0] != 1:
+                        pc2 = pc1[a:count[i]+a,:]
+                        pc3.append(pc2[np.where(pc2[:,6] == unique_seg[np.argmax(count_seg)])])
+                        psl.append(np.int32(unique_seg[np.argmax(count_seg)]))
+                        del pc2
+                    else:
+                        psl.append(np.int32(unique_seg[0]))
+                        pc3.append(pc1[a:count[i]+a,:])
+                elif self.params.psl_sup == "psl":
+                    psl.append(np.int32(unique_seg[0]))
+                    pc3.append(pc1[a:count[i]+a,:])
+                a += count[i]
+            
+            pc3 = np.random.permutation(np.vstack(pc3))
+            coord_t.append(pc3[:,:3])
+            feats_t.append(pc3[:,3:6])
+            s_t.append(pc3[:,7])
+            
+        return coord_t, feats_t, s_t, psl
+
+    def forward(self, pcd_q, pcd_k, s_pci, s_pcj, inv_i, inv_j, train_step, current_epoch):
         """
         Input:
             pcd_q: a batch of query pcds
@@ -304,87 +376,130 @@ class MoCo(nn.Module):
         Output:
             logits, targets
         """
-        with torch.no_grad():
-        # compute query features
-            h_q = self.model_q(pcd_q)  # queries: NxC
-            if segments is None:
-                pred_q = self.classifier_q(h_q)
-            else:
-                # coord and feat in the shape N*SxPx3 and N*SxPxF
-                # where N is the batch size and S is the number of segments in each scan
-                h_qs = list_segments_points(h_q.C, h_q.F, np.asarray(segments[0]))
-    
-                z_qs = self.head_q(h_qs)
-                q_seg = nn.functional.normalize(z_qs, dim=1)
-        # compute key features
 
-        # shuffle for making use of BN
-        #if torch.cuda.device_count() > 1:
-        #    pcd_k, idx_unshuffle = self._batch_shuffle_ddp(pcd_k)
-
-        # many Batch Normalization operations we shuffle before it to have shuffle BN
-        h_k = self.model_k(pcd_k)  # keys: NxC
         
-        # IMPORTANT: in the projection head we dont have batch normalization, so unshuffling before
-        # passing over the proj head will maintain the shuffle BN chracteristics
-        #if torch.cuda.device_count() > 1:
-        #    h_k = self._batch_unshuffle_ddp(h_k, idx_unshuffle)
+        #updating the teacher using EMA, except the first itteration of the first epoch
+        if train_step != 1 or current_epoch != 0:
+            self._EMA_teacher_update()
+        # training teacher and generating pseudo-labels
+        ps_l = []
+        with torch.no_grad():
+            h_q = self.model_q(pcd_q)  # queries: NxC
+            pred_q = self.classifier_q(h_q)
+            ps_l.append((pred_q.max(dim=1)[1]).cpu())
 
-        if segments is None:
-            pred_k = self.classifier_k(h_k)
-            return pred_q, pred_k
-        else:
-            # coord and feat in the shape N*SxPx3 and N*SxPxF
-            # where N is the batch size and S is the number of segments in each scan
-
-            h_ks = list_segments_points(h_k.C, h_k.F, np.asarray(segments[1]))
-
-            z_ks = self.head_k(h_ks)
-            k_seg = nn.functional.normalize(z_ks, dim=1)
+        # training student and generating predictions
+        h_k = self.model_k(pcd_k)  # keys: NxC
+        pred_k = self.classifier_k(h_k)
+        ps_l.append((pred_k.max(dim=1)[1]).cpu())
+        
+        #pseudo-label selection
+        ps_l_conf = torch.softmax(pred_q, dim=1)
+        ind = self.psl_selection(ps_l_conf.cpu().numpy(), ps_l[0].numpy())
+        
+        #getting the selected pseudo-labels for each batch with their inds from the original batches
+        selected_inds = []
+        ps_l_true = []
+        _len = 0
+        for batch_num in range(s_pci.shape[0]):
+            batch_ind = h_q.C[:,0].cpu().numpy() == batch_num
+            selected_inds.append(batch_ind[ind])
+            selected_inds[batch_num] = ind[selected_inds[batch_num]]
+            selected_inds[batch_num] = selected_inds[batch_num]-_len
+            _len += len(np.argwhere(batch_ind==True))
+            ps_l_true.append(ps_l[0][selected_inds[batch_num]].numpy())
+        
+        #getting the coords, feats and segments for the projection head
+        if self.args.pure == False and self.args.psl_sup == 'none':
+            c_coord_i = h_q.C
+            c_feats_i = h_q.F
+            segment_i = s_pci
             
-            l_pos_seg = torch.einsum('nc,nc->n', [q_seg, k_seg]).unsqueeze(-1)
+            c_coord_j = h_k.C
+            c_feats_j = h_k.F
+            segment_j = s_pcj
+
+        else: 
+            #segment purification and false negative pair removal
+            (segment_i, pi_ind, psl_i), (segment_j, pj_ind, psl_j) = pc_to_segment_pure(self.args, s_pci, s_pcj, selected_inds, ps_l_true, self.num_points, self.resolution)
             
-############################################################
-        if self.args.psl_sup != "None":
-            if len(np.unique(psls[0].numpy())) > 1:
+            c_coord_i = []
+            c_feats_i = []
+            
+            c_coord_j = []
+            c_feats_j = []
+            
+            for batch_num in range(pi_ind.shape[0]):
+                batch_ind_i = h_q.C[:,0] == batch_num
+                c_coord_i.append(h_q.C[batch_ind_i][pi_ind[batch_num]])
+                c_feats_i.append(h_q.F[batch_ind_i][pi_ind[batch_num]])
+                
+                batch_ind_j = h_k.C[:,0] == batch_num
+                c_coord_j.append(h_k.C[batch_ind_j][pj_ind[batch_num]])
+                c_feats_j.append(h_k.F[batch_ind_j][pj_ind[batch_num]])
+                
+            c_coord_i = torch.vstack(c_coord_i)
+            c_feats_i = torch.vstack(c_feats_i)
+            segment_i = np.asarray(segment_i)
+            
+            c_coord_j = torch.vstack(c_coord_j)
+            c_feats_j = torch.vstack(c_feats_j)
+            segment_j = np.asarray(segment_j)          
+        
+        #training the projection head for teacher and student to get the positive and negative embadings for the Contrastive loss   
+        with torch.no_grad():
+           
+            h_qs = list_segments_points(c_coord_i, c_feats_i , segment_i)
+            z_qs = self.head_q(h_qs)
+            q_seg = nn.functional.normalize(z_qs, dim=1)
+            
+        h_ks = list_segments_points(c_coord_j, c_feats_j , segment_j)
+        z_ks = self.head_k(h_ks)
+        k_seg = nn.functional.normalize(z_ks, dim=1)
+        
+        #Positive logits
+        l_pos_seg = torch.einsum('nc,nc->n', [q_seg, k_seg]).unsqueeze(-1)
+
+        if self.args.psl_sup != "none":
+            #getting Negative logits using class-wise memory banks
+            if len(np.unique(psl_i)) > 1:
                 l_neg_seg = []
                 l_pos_seg_i = []
-                for i in np.unique(psls[0].numpy()):
+                for i in np.unique(psl_i):
                     neg_bank_ci = self.queue_seg.clone().detach()[:,np.argwhere((self.queue_seg_psl!=i)[0].cpu().numpy()).squeeze()]
-                    q_seg_ci = q_seg[np.argwhere(psls[0]!=i).cpu().numpy().squeeze(),:]
-                    l_pos_seg_i.append(l_pos_seg[np.argwhere(psls[0]!=i).cpu().numpy().squeeze(),:])
+                    q_seg_ci = q_seg[np.argwhere(psl_i==i).squeeze(),:]
+                    l_pos_seg_i.append(l_pos_seg[np.argwhere(psl_i==i).squeeze(),:])
                     if len(q_seg_ci.shape) > 1:
                         l_neg_seg.append(torch.einsum('nc,ck->nk', [q_seg_ci, neg_bank_ci]))
                     else:
                         l_neg_seg.append(torch.einsum('nc,ck->nk', [torch.unsqueeze(q_seg_ci,0), neg_bank_ci]))
             
                 min_shape = min(arr.shape[1] for arr in l_neg_seg)
-                l_neg_seg1 = []
-                for tensor in l_neg_seg:
-                    l_neg_seg1.append(tensor[:,:min_shape])
-                l_neg_seg = torch.vstack(l_neg_seg1)
+                for i, tensor in enumerate(l_neg_seg):
+                    l_neg_seg[i] = tensor[:,:min_shape]
+                l_neg_seg = torch.vstack(l_neg_seg)
                 l_pos_seg = torch.vstack(l_pos_seg_i)
             
             else:
                 l_neg_seg = torch.einsum('nc,ck->nk', [q_seg, self.queue_seg.clone().detach()])
             # dequeue and enqueue
-            self._dequeue_and_enqueue_seg(k_seg, psls[1])
+            self._dequeue_and_enqueue_seg(k_seg, torch.tensor(psl_j))
         else:
-            # negative logits: NxK
+            #Negative logits using a memory bank
             l_neg_seg = torch.einsum('nc,ck->nk', [q_seg, self.queue_seg.clone().detach()])
             # dequeue and enqueue
             self._dequeue_and_enqueue_seg(k_seg)
 
-#######################################################################
-            # logits: Nx(1+K)
+#######################################################################        
+        
+        # logits: Nx(1+K)
         logits_seg = torch.cat([l_pos_seg, l_neg_seg], dim=1)
-
         # apply temperature
         logits_seg /= self.T
         # labels: positive key indicators
         labels_seg = torch.zeros(logits_seg.shape[0], dtype=torch.long).cuda()
         # return logits_seg, labels_seg
-        return logits_seg, labels_seg
+        return logits_seg, labels_seg, pred_q, pred_k
 
 @torch.no_grad()
 def concat_all_gather(tensor):

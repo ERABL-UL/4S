@@ -11,7 +11,7 @@ from functools import partial
 import OSToolBox as ost
 import torch.nn as nn
 class SemanticKITTIContrastiveTrainer(pl.LightningModule):
-    def __init__(self, model, criterion_sup, criterion_us, train_loader, val_loader, params, alpha=0.99999):
+    def __init__(self, model, criterion_sup, criterion_us, train_loader, val_loader, params):
         super().__init__()
         self.moco_model = model        
         self.criterion_sup = criterion_sup
@@ -26,7 +26,6 @@ class SemanticKITTIContrastiveTrainer(pl.LightningModule):
         self.loss_s_eval = []
         self.train_step = 0
         self.val_step = 0
-        self.alpha = alpha
         self.evaluator = iouEval(n_classes=self.params.num_classes, ignore=0)
         if self.params.load_checkpoint:
             self.load_checkpoint()
@@ -35,8 +34,8 @@ class SemanticKITTIContrastiveTrainer(pl.LightningModule):
     # FORWARD                                                                                                                                  #
     ############################################################################################################################################
 
-    def forward(self, xi, xj, s=None, psl=None):
-        return self.moco_model(xi, xj, s, psl) 
+    def forward(self, xi, xj, s_i, s_j, inv_i, inv_j):
+        return self.moco_model(xi, xj, s_i, s_j, inv_i, inv_j, self.train_step, self.current_epoch) 
     
 
 
@@ -45,80 +44,11 @@ class SemanticKITTIContrastiveTrainer(pl.LightningModule):
     ############################################################################################################################################
     # TRAINING                                                                                                                                 #
     ############################################################################################################################################
-    @torch.no_grad()
-    def _EMA_teacher_update(self):
-        """
-        Momentum update of the teacher
-        """
-        for param_q, param_k in zip(self.moco_model.model_q.parameters(), self.moco_model.model_k.parameters()):
-            param_q.data = param_q.data * self.alpha + param_k.data * (1. - self.alpha)
-
-        for param_q, param_k in zip(self.moco_model.head_q.parameters(), self.moco_model.head_k.parameters()):
-            param_q.data = param_q.data * self.alpha + param_k.data * (1. - self.alpha)
-
-        for param_q, param_k in zip(self.moco_model.classifier_q.parameters(), self.moco_model.classifier_k.parameters()):
-            param_q.data = param_q.data * self.alpha + param_k.data * (1. - self.alpha)
-            
-    def confidence_threshold(self, prediction_tensor, ps_l, pred_k):
-        p_t = prediction_tensor.detach().cpu().numpy()
-        c = ps_l.cpu().numpy()
-        conf = [0, 0.959, 0.844, 0.672, 0.933, 0.409, 0.879]
-        idx = []
-
-        for clas in range(1,7):
-            
-            idx_clas = np.argwhere(c==clas)[:,0]
-            b_clas = p_t[idx_clas][:,clas]
-            idx_true = np.argwhere(b_clas > conf[clas])[:,0]
-            idx.append(idx_clas[idx_true])
-        idx = np.hstack(idx)
-        np.sort(idx)
-        # idx_false = np.asarray(list(set(np.asarray(range(c.shape[0])))-set(idx)))
-
-        return ps_l[idx], pred_k[idx]
     
-    def segment_purification(self,  x_coord, x_feats, s, idx, ps_l):
-        ps_l_idx = np.c_[np.asarray(ps_l.cpu()),np.asarray(range(ps_l.shape[0]))]
-        
-        coord_t = []
-        feats_t = []
-        s_t = []
-        psl = []
-        for pc_idx in range(x_coord.shape[0]):
-            ps_l_i = ps_l_idx[np.int32(idx[pc_idx])]
-            pc = np.c_[x_coord[pc_idx], x_feats[pc_idx], ps_l_i,s[pc_idx]]          
-            pc = np.c_[pc[:,:7],pc[:,8:]]
-            unique, count = np.unique(pc[:,7], return_counts=True)
-            pc1 = pc[pc[:, 7].argsort()]
-            a = count[0]
-            pc3 = []
-            pc3.append(pc1[:count[0]])
-            for i in range(1,unique.shape[0]):
-                unique_seg, count_seg = np.unique(pc1[a:count[i]+a,6], return_counts=True)
-                if self.params.psl_sup != "psl":
-                    if unique_seg.shape[0] != 1:
-                        pc2 = pc1[a:count[i]+a,:]
-                        pc3.append(pc2[np.where(pc2[:,6] == unique_seg[np.argmax(count_seg)])])
-                        psl.append(np.int32(unique_seg[np.argmax(count_seg)]))
-                        del pc2
-                    else:
-                        psl.append(np.int32(unique_seg[0]))
-                        pc3.append(pc1[a:count[i]+a,:])
-                elif self.params.psl_sup == "psl":
-                    psl.append(np.int32(unique_seg[0]))
-                    pc3.append(pc1[a:count[i]+a,:])
-                a += count[i]
-            
-            pc3 = np.random.permutation(np.vstack(pc3))
-            coord_t.append(pc3[:,:3])
-            feats_t.append(pc3[:,3:6])
-            s_t.append(pc3[:,7])
-            
-        return coord_t, feats_t, s_t, psl
 
                 
     def teacher_student_step(self, batch, batch_nb):
-        (xi_coord, xi_feats, si, idx_i), (xj_coord, xj_feats, sj, idx_j), (pci_coord, pci_feats, pci_inverse), (pcj_coord, pcj_feats, pcj_inverse) = batch
+        (pci_coord, pci_feats, s_pci, pci_inverse), (pcj_coord, pcj_feats, s_pcj, pcj_inverse) = batch
         
         #Supervised Loss
         pci, pcj = collate_points_to_sparse_tensor(pci_coord, pci_feats, pcj_coord, pcj_feats)
@@ -126,50 +56,23 @@ class SemanticKITTIContrastiveTrainer(pl.LightningModule):
         batch_idx.append(0)
         for i in range(len(pci_coord)):
             batch_idx.append(np.argwhere(pci.C.cpu().numpy()[:,0]==i)[-1][0]+1)
-        pred_q, pred_k = self.forward(pci, pcj)
-        prediction_tensor = torch.softmax(pred_q, dim=1)
-        prediction_tensor_c = []
-        pred_q_c = []
-        pred_k_c = []
+            
+        out_seg, tgt_seg, pred_q, pred_k = self.forward(pci, pcj, s_pci, s_pcj, pci_inverse, pcj_inverse)
+        ps_l = pred_q.max(dim=1)[1]
+        loss_s = self.criterion_sup(pred_k, ps_l)
         
-        for i in range(1,len(batch_idx)):
-            prediction_tensor_c.append(prediction_tensor[batch_idx[i-1]:batch_idx[i]][pci_inverse[i-1]])
-            pred_q_c.append(pred_q[batch_idx[i-1]:batch_idx[i]][pci_inverse[i-1]])
-            pred_k_c.append(pred_k[batch_idx[i-1]:batch_idx[i]][pci_inverse[i-1]])
-
-        prediction_tensor_c = torch.vstack(prediction_tensor_c)
-        pred_q_c = torch.vstack(pred_q_c)
-        pred_k_c = torch.vstack(pred_k_c)
-
-        ps_l = pred_q_c.max(dim=1)[1]
-        ps_l_true, pred_k_true = self.confidence_threshold(prediction_tensor_c, ps_l, pred_k_c)
-        loss_s = self.criterion_sup(pred_k_true, ps_l_true)
-        pred = pred_k_true.max(dim=1)[1]
-        correct = pred.eq(ps_l_true).sum().item()
-        correct /= ps_l_true.size(0)
+        pred = pred_k.max(dim=1)[1]
+        correct = pred.eq(ps_l).sum().item()
+        correct /= ps_l.size(0)
         batch_acc = (correct * 100.)
-        
-        #Contrastive Loss
-        if self.params.psl_sup != "None" or self.params.pure == True:
-            xi_coord, xi_feats, si, psl_i = self.segment_purification(xi_coord, xi_feats, si, idx_i, ps_l)
-            xj_coord, xj_feats, sj, psl_j = self.segment_purification(xj_coord, xj_feats, sj, idx_j, ps_l)
-            xi, xj = collate_points_to_sparse_tensor(xi_coord, xi_feats, xj_coord, xj_feats)
-    
-            out_seg, tgt_seg= self.forward(xi, xj, [si, sj], [torch.tensor(psl_i),torch.tensor(psl_j)])
-        else:   
-            xi, xj = collate_points_to_sparse_tensor(xi_coord, xi_feats, xj_coord, xj_feats)
-    
-            out_seg, tgt_seg= self.forward(xi, xj, [si, sj])
-        loss_c = self.criterion_us(out_seg, tgt_seg)
-        # loss = loss_s
-        loss = loss_s + self.params.lambda_c*loss_c
-        
-        self.downstream_iter_callback(loss.item(), loss_c.item(), loss_s.item(), batch_acc, pred, ps_l_true, True)
-        # self.contrastive_iter_callback(loss.item())
-        # return {'loss': loss}
 
-        # update the teacher
-        self._EMA_teacher_update()
+        #Contrastive Loss
+        loss_c = self.criterion_us(out_seg, tgt_seg)
+        #Total Loss
+        loss = loss_s + self.params.lambda_c*loss_c
+
+        
+        self.downstream_iter_callback(loss.item(), loss_c.item(), loss_s.item(), batch_acc, pred, ps_l, True)
         return {'loss': loss, 'acc': batch_acc}
 
 

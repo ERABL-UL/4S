@@ -25,7 +25,6 @@ class SemanticKITTIDataLoader(Dataset):
 
         self.seq_ids = {}
         self.seq_ids['train'] = [ '00', '02', '03', '04', '05', '06', '07', '09', '10']
-        # self.seq_ids['train'] = ["04"]
         self.seq_ids['validation'] = ['00', '02', '03', '04', '05', '06', '07', '09', '10']
 
         self.split = split
@@ -123,11 +122,10 @@ class SemanticKITTIDataLoader(Dataset):
         
         # np.random.shuffle(points_set)
             # Px5 -> [x, y, z, i, c] where i is the intesity and c the Cluster associated to the point
-
-        points_i = random_cuboid_point_cloud(points_set.copy())
-        points_i = self.transforms_segment(points_i, drop=True)
-        points_j = random_cuboid_point_cloud(points_set.copy())
-        points_j = self.transforms_segment(points_j, drop=True)        
+        # points_i = random_cuboid_point_cloud(points_set.copy())
+        # points_i = self.transforms_segment(points_i, drop=True)
+        # points_j = random_cuboid_point_cloud(points_set.copy())
+        # points_j = self.transforms_segment(points_j, drop=True)        
         pc_i = self.transforms(pc)
         pc_j = self.transforms(pc)
         # if not self.intensity_channel:
@@ -135,7 +133,8 @@ class SemanticKITTIDataLoader(Dataset):
         #     points_j = points_j[:, :3]
         # now the point set returns [x,y,z,i,c] always
         del pc, points_set
-        return points_i, points_j, pc_i, pc_j
+        # return points_i, points_j, pc_i, pc_j
+        return pc_i, pc_j
 
     def _get_item(self, index):
         points_set,label = self.read_ply(self.points_datapath[index])

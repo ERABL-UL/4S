@@ -37,7 +37,7 @@ if __name__ == "__main__":
                         help='Feature output size (default: 128')
     parser.add_argument('--device-id', type=int, default=0,
                         help='GPU device id (default: 0')
-    parser.add_argument('--num-points', type=int, default=20000,
+    parser.add_argument('--num-points', type=int, default=80000,
                         help='Number of points sampled from point clouds (default: 20000')
     parser.add_argument('--sparse-resolution', type=float, default=0.05,
                         help='Sparse tensor resolution (default: 0.05')
@@ -59,7 +59,7 @@ if __name__ == "__main__":
                         help='Fine-tune or linear evaluation (default: False')
     parser.add_argument('--pure', action='store_true', default=False,
                         help='Performs segment purification(default: False)')
-    parser.add_argument('--psl-sup', default="None",
+    parser.add_argument('--psl-sup', default="none",
                         help='none,psl,psl+seg')
 
     
