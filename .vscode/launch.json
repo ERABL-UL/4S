@@ -10,7 +10,7 @@
             "request": "launch",
             "module": "contrastive_train",
             "justMyCode": true,
-            "args": ["--use-cuda", "--use-intensity", "--segment-contrast", "--checkpoint", "segcontrast"]
+            "args": ["--use-cuda", "--use-intensity", "--segment-contrast", "--checkpoint", "segcontrast", "--vicreg"]
         }
     ]
 }

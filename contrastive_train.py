@@ -52,8 +52,8 @@ if __name__ == "__main__":
     
     # VICReg arguments
     parser.add_argument('--vicreg', action='store_true', default=False, help='Use VICReg')
-    parser.add_argument('--vicreg-alpha', type=float, default=0.5,
-                        help='VICReg alpha that controls the importance put on learning global vs local features.'
+    parser.add_argument('--vicreg-alpha', type=float, default=0.75,
+                        help='VICRegL alpha that controls the importance put on learning global vs local features.'
                         'alpha = 1 -> only global features, alpha = 0 -> only local features (default: 0.1')
     parser.add_argument('--vicreg-num-global', type=int, default=20, help='Number of nearest neighbors for global features (gamma_1 in the paper)')
     parser.add_argument('--vicreg-num-local', type=int, default=4, help='Number of nearest neighbors for local features (gamma 2 in the paper)')
@@ -62,6 +62,11 @@ if __name__ == "__main__":
     parser.add_argument('--vicreg-cov-coeff', type=float, default=1, help='Covariance coefficient for VICReg loss (nu in the paper)')
     parser.add_argument('--vicreg-eps', type=float, default=1e-4, help='Epsilon for VICReg loss')
     parser.add_argument('--vicreg-gamma', type=float, default=1, help='Target variance for VICReg loss (gamma in VICReg paper)')
+    # TODO add mlp dimensions for VICReg
+    #      mlp = 8192-8192-9192 for global features
+    #      mlp = 512-512-512 for local features
+    # parser.add_argument('--vicreg-local-dim', type=int, default=32, help='Dimension of local features')
+    # parser.add_argument('--vicreg-global-dim', type=int, default=128, help='Dimension of global features')
 
     args = parser.parse_args()
 

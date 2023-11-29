@@ -5,6 +5,7 @@ from data_utils.datasets.SemanticKITTIDataLoader import SemanticKITTIDataLoader
 from data_utils.datasets.SemanticPOSSDataLoader import SemanticPOSSDataLoader
 from models.minkunet import *
 from models.moco import *
+from models.moco_vicreg import MoCoVICReg
 from models.blocks import ProjectionHead, SegmentationClassifierHead
 from data_utils.data_map import content, content_indoor
 
@@ -44,6 +45,8 @@ def get_projection_head(args, dtype):
     return ProjectionHead(in_channels=latent_features[args.sparse_model], out_channels=args.feature_size)#.type(dtype)
 
 def get_moco_model(args, dtype):
+    if args.vicreg:
+        return MoCoVICReg(sparse_models[args.sparse_model], ProjectionHead, dtype, args)
     return MoCo(sparse_models[args.sparse_model], ProjectionHead, dtype, args)
 
 def get_classifier_head(args, dtype):
