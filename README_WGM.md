@@ -4,6 +4,9 @@
 Setup devcontainer
 ```bash
 cp .devcontainer/devcontainer.json.turing .devcontainer/devcontainer.json
+
+# In container
+pip3 install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --no-deps
 ```
 
 ## Training
