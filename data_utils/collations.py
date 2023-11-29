@@ -119,12 +119,12 @@ class SparseAugmentedCollation:
         
         for pi, pj in zip(pc_i, pc_j):
             # pi[:,:-1] will be the points and intensity values, and the labels will be the cluster ids
-            coord_pi, feats_pi, cluster_pi, inverse_pi = point_set_to_coord_feats(pi[:,:3], pi[:,3], self.resolution, self.num_points)
+            coord_pi, feats_pi, cluster_pi, inverse_pi = point_set_to_coord_feats(pi[:,:3], pi[:,3], self.resolution, pi.shape[0])
             pci_coord.append(coord_pi)
             pci_feats.append(coord_pi)
             pci_inverse.append(inverse_pi)
             # pj[:,:-1] will be the points and intensity values, and the labels will be the cluster ids
-            coord_pj, feats_pj, cluster_pj, inverse_pj = point_set_to_coord_feats(pj[:,:3], pj[:,3], self.resolution, self.num_points)
+            coord_pj, feats_pj, cluster_pj, inverse_pj = point_set_to_coord_feats(pj[:,:3], pj[:,3], self.resolution, pi.shape[0])
             pcj_coord.append(coord_pj)
             pcj_feats.append(coord_pj)
             pcj_inverse.append(inverse_pj)
