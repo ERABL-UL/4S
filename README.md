@@ -86,8 +86,14 @@ python3 ./data_preparation/fps_knn_threading.py --path ./Datasets/KITTI-360/vali
          --save-path ./Datasets/KITTI-360/fps_knn --split validation
 ```
 
+Now we need to segment the generated point clouds using RANSAC and DBScan:
 
-
+```
+python3 ./data_utils/segmentation.py --dataset KITTI360 --path ./Datasets/KITTI-360/fps_knn \
+         --save-path ./Datasets/segmented_views --split train --seq-ids [0,2,3,4,5,6,7,9,10]
+python3 ./data_utils/segmentation.py --dataset SemanticKITTI --path ./Datasets/SemanticKITTI \
+         --save-path ./Datasets/segmented_views --split train --seq-ids [0,1,2,3,4,5,6,7,9,10]
+```
 
 # Reproducing the results
 
