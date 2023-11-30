@@ -27,7 +27,7 @@ Then start the container with:
 docker run --gpus all -it --rm -v /PATH/TO/SEGCONTRAST:/home/segcontrast segcontrast /bin/zsh
 ```
 
-# Data Preparation
+# Downloading Datasets
 
 Download [SemanticKITTI](http://www.semantic-kitti.org/dataset.html#download) inside the directory ```./Datasets/SemanticKITTI/datasets```. The directory structure should be:
 
@@ -51,7 +51,7 @@ Download [SemanticKITTI](http://www.semantic-kitti.org/dataset.html#download) in
             └── 21/
                 └── ...
 ```
-Download [KITTI-360](https://www.cvlibs.net/datasets/kitti-360/user_login.php) inside the directory ```./Datasets/KITTI-360/dataset```. The directory structure should be:
+Download [KITTI-360](https://www.cvlibs.net/datasets/kitti-360/user_login.php) inside the directory ```./Datasets/KITTI-360```. The directory structure should be:
 ```
 ./
 └── Datasets/
@@ -60,12 +60,12 @@ Download [KITTI-360](https://www.cvlibs.net/datasets/kitti-360/user_login.php) i
           └── sequences
             ├── 00/           
             │   ├── {start_frame:0>10}_{end_frame:0>10}.ply
-            |   └── ...
+                └── ...
         └── validation
             └── sequences
                 ├── 00/
                 │   ├── {start_frame:0>10}_{end_frame:0>10}.ply
-                |   └── ...
+                    └── ...
         └── test
             └── sequences
                 ├── 08/
@@ -73,18 +73,21 @@ Download [KITTI-360](https://www.cvlibs.net/datasets/kitti-360/user_login.php) i
                 |   └── ...
                 ├── 18/
                 │   ├── {start_frame:0>10}_{end_frame:0>10}.ply
-                |   └── ...
+                    └── ...
+```
+
+# Data Preparation
+First, we need to prepare large point clouds of KITTI-360 for the input of the network. We follow the instructions of [Mahmoudi Kouhi, Reza et al.](https://www.mdpi.com/2072-4292/15/4/982) to prepare the data:
+
+```
+python3 ./data_preparation/fps_knn_threading.py --path ./Datasets/KITTI-360/train \
+         --save-path ./Datasets/KITTI-360/fps_knn --split train
+python3 ./data_preparation/fps_knn_threading.py --path ./Datasets/KITTI-360/validation \
+         --save-path ./Datasets/KITTI-360/fps_knn --split validation
 ```
 
 
-# Pretrained Weights
-- SegContrast pretraining [weights](https://www.ipb.uni-bonn.de/html/projects/segcontrast/segcontrast_pretrain.zip)
-- Fine-tuned semantic segmentation
-    - 0.1% labels [weights](https://www.ipb.uni-bonn.de/html/projects/segcontrast/semantic_segmentation_weights/semseg_finetune_0p001.zip)
-    - 1% labels [weights](https://www.ipb.uni-bonn.de/html/projects/segcontrast/semantic_segmentation_weights/semseg_finetune_0p01.zip)
-    - 10% labels [weights](https://www.ipb.uni-bonn.de/html/projects/segcontrast/semantic_segmentation_weights/semseg_finetune_0p1.zip)
-    - 50% labels [weights](https://www.ipb.uni-bonn.de/html/projects/segcontrast/semantic_segmentation_weights/semseg_finetune_0p5.zip)
-    - 100% labels [weights](https://www.ipb.uni-bonn.de/html/projects/segcontrast/semantic_segmentation_weights/semseg_finetune_1p0.zip)
+
 
 # Reproducing the results
 
