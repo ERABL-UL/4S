@@ -51,6 +51,31 @@ Download [SemanticKITTI](http://www.semantic-kitti.org/dataset.html#download) in
             └── 21/
                 └── ...
 ```
+Download [KITTI-360](https://www.cvlibs.net/datasets/kitti-360/user_login.php) inside the directory ```./Datasets/KITTI-360/dataset```. The directory structure should be:
+
+./
+└── Datasets/
+    └── KITTI360
+        └── train
+          └── sequences
+            ├── 00/           
+            │   ├── {start_frame:0>10}_{end_frame:0>10}.ply
+            |   └── ...
+        └── validation
+            └── sequences
+                ├── 00/
+                │   ├── {start_frame:0>10}_{end_frame:0>10}.ply
+                |   └── ...
+        └── test
+            └── sequences
+                ├── 08/
+                │   ├── {start_frame:0>10}_{end_frame:0>10}.ply
+                |   └── ...
+                ├── 18/
+                │   ├── {start_frame:0>10}_{end_frame:0>10}.ply
+                |   └── ...
+```
+
 
 # Pretrained Weights
 - SegContrast pretraining [weights](https://www.ipb.uni-bonn.de/html/projects/segcontrast/segcontrast_pretrain.zip)
