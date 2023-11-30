@@ -52,7 +52,7 @@ Download [SemanticKITTI](http://www.semantic-kitti.org/dataset.html#download) in
                 └── ...
 ```
 Download [KITTI-360](https://www.cvlibs.net/datasets/kitti-360/user_login.php) inside the directory ```./Datasets/KITTI-360/dataset```. The directory structure should be:
-
+```
 ./
 └── Datasets/
     └── KITTI360
