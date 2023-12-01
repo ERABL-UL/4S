@@ -2,7 +2,7 @@
 	"name": "vicreg",
 	"build": {
 		"context": "..",
-		"dockerfile": "../docker/Dockerfile"
+		"dockerfile": "../docker/DockerfileExx"
 	},
 	"workspaceFolder": "/workspaces/4S",
 	"workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/4S,type=bind",
