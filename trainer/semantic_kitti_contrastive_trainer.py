@@ -43,8 +43,11 @@ class SemanticKITTIContrastiveTrainer(pl.LightningModule):
 
         xi, xj = collate_points_to_sparse_tensor(xi_coord, xi_feats, xj_coord, xj_feats)
 
-        out_seg, tgt_seg = self.forward(xi, xj, [si, sj])
-        loss = self.criterion(out_seg, tgt_seg)
+        if self.params.vicreg:
+            loss = self.forward(xi, xj, [si, sj])
+        else:
+            out_seg, tgt_seg = self.forward(xi, xj, [si, sj])
+            loss = self.criterion(out_seg, tgt_seg)
 
         self.contrastive_iter_callback(loss.item())
 

@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+
 from data_utils.collations import *
 
 latent_features = {
@@ -57,84 +59,7 @@ class MoCoVICReg(nn.Module):
             self.model_k = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.model_k)
             self.head_k = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.head_k)
 
-    @torch.no_grad()
-    def _momentum_update_key_encoder(self):
-        """
-        Momentum update of the key encoder
-        """
-        for param_q, param_k in zip(self.model_q.parameters(), self.model_k.parameters()):
-            param_k.data = param_k.data * self.m + param_q.data * (1. - self.m)
-
-        for param_q, param_k in zip(self.head_q.parameters(), self.head_k.parameters()):
-            param_k.data = param_k.data * self.m + param_q.data * (1. - self.m)
-
-    @torch.no_grad()
-    def _dequeue_and_enqueue_pcd(self, keys):
-        # gather keys before updating queue
-        if torch.cuda.device_count() > 1:
-            keys = concat_all_gather(keys)
-
-        batch_size = keys.shape[0]
-
-        ptr = int(self.queue_pcd_ptr)
-        #assert self.K % batch_size == 0  # for simplicity
-
-        # replace the keys at ptr (dequeue and enqueue)
-        if ptr + batch_size <= self.K:
-            self.queue_pcd[:, ptr:ptr + batch_size] = keys.T
-        else:
-            tail_size = self.K - ptr
-            head_size = batch_size - tail_size
-            self.queue_pcd[:, ptr:self.K] = keys.T[:, :tail_size]
-            self.queue_pcd[:, :head_size] = keys.T[:, tail_size:]
-
-        ptr = (ptr + batch_size) % self.K  # move pointer
-
-        self.queue_pcd_ptr[0] = ptr
-
-    @torch.no_grad()
-    def _dequeue_and_enqueue_seg(self, keys):
-        # gather keys before updating queue
-        if torch.cuda.device_count() > 1:
-            # similar to shuffling, since for each gpu the number of segments may not be the same
-            # we create a aux variable keys_gather of size (1, MAX_SEG_BATCH, 128)
-            # add the current seg batch to [0,:CURR_SEG_BATCH, 128] gather them all in
-            # [NUM_GPUS,MAX_SEG_BATCH,128] and concatenate only the filled seg batches
-            seg_size = torch.from_numpy(np.array([keys.shape[0]])).cuda()
-            all_seg_size = concat_all_gather(seg_size)
-
-            keys_gather = torch.ones((1, all_seg_size.max(), keys.shape[-1])).cuda()
-            keys_gather[0, :keys.shape[0],:] = keys[:,:]
-
-            all_keys = concat_all_gather(keys_gather)
-            gather_keys = None
-
-            for k in range(len(all_seg_size)):
-                if gather_keys is None:
-                    gather_keys = all_keys[k][:all_seg_size[k],:]
-                else:
-                    gather_keys = torch.cat((gather_keys, all_keys[k][:all_seg_size[k],:]))
-
-
-            keys = gather_keys
-
-        batch_size = keys.shape[0]
-
-        ptr = int(self.queue_seg_ptr)
-        #assert self.K % batch_size == 0  # for simplicity
-
-        # replace the keys at ptr (dequeue and enqueue)
-        if ptr + batch_size <= self.K:
-            self.queue_seg[:, ptr:ptr + batch_size] = keys.T
-        else:
-            tail_size = self.K - ptr
-            head_size = batch_size - tail_size
-            self.queue_seg[:, ptr:self.K] = keys.T[:, :tail_size]
-            self.queue_seg[:, :head_size] = keys.T[:, tail_size:]
-
-        ptr = (ptr + batch_size) % self.K  # move pointer
-
-        self.queue_seg_ptr[0] = ptr
+        self.args = args
 
     @torch.no_grad()
     def _batch_shuffle_ddp(self, x):
@@ -209,7 +134,6 @@ class MoCoVICReg(nn.Module):
 
         return x_this, idx_unshuffle
 
-
     @torch.no_grad()
     def _batch_unshuffle_ddp(self, x, idx_unshuffle):
         """
@@ -282,6 +206,7 @@ class MoCoVICReg(nn.Module):
         Output:
             logits, targets
         """
+        assert segments is not None
 
         # compute query features
         h_q = self.model_q(pcd_q)  # queries: NxC
@@ -293,40 +218,34 @@ class MoCoVICReg(nn.Module):
             # coord and feat in the shape N*SxPx3 and N*SxPxF
             # where N is the batch size and S is the number of segments in each scan
 
-            # TODO keep the batch dimension
-            h_qs = list_segments_points_batch(h_q.C, h_q.F, segments[0])
+            h_qs = list_segments_points(h_q.C, h_q.F, segments[0])
 
             z_qs = self.head_q(h_qs)
             q_seg = nn.functional.normalize(z_qs, dim=1)
-            # TODO add projectors for segments
-
 
         # compute key features
-        with torch.no_grad():  # no gradient to keys
-            self._momentum_update_key_encoder()  # update the key encoder
+        # shuffle for making use of BN
+        #if torch.cuda.device_count() > 1:
+        #    pcd_k, idx_unshuffle = self._batch_shuffle_ddp(pcd_k)
 
-            # shuffle for making use of BN
-            #if torch.cuda.device_count() > 1:
-            #    pcd_k, idx_unshuffle = self._batch_shuffle_ddp(pcd_k)
+        # many Batch Normalization operations we shuffle before it to have shuffle BN
+        h_k = self.model_k(pcd_k)  # keys: NxC
 
-            # many Batch Normalization operations we shuffle before it to have shuffle BN
-            h_k = self.model_k(pcd_k)  # keys: NxC
+        # IMPORTANT: in the projection head we dont have batch normalization, so unshuffling before
+        # passing over the proj head will maintain the shuffle BN chracteristics
+        #if torch.cuda.device_count() > 1:
+        #    h_k = self._batch_unshuffle_ddp(h_k, idx_unshuffle)
 
-            # IMPORTANT: in the projection head we dont have batch normalization, so unshuffling before
-            # passing over the proj head will maintain the shuffle BN chracteristics
-            #if torch.cuda.device_count() > 1:
-            #    h_k = self._batch_unshuffle_ddp(h_k, idx_unshuffle)
+        if segments is None:
+            z_k = self.head_k(h_k)
+            k_pcd = nn.functional.normalize(z_k, dim=1)
+        else:
+            # coord and feat in the shape N*SxPx3 and N*SxPxF
+            # where N is the batch size and S is the number of segments in each scan
+            h_ks = list_segments_points(h_k.C, h_k.F, segments[1])
 
-            if segments is None:
-                z_k = self.head_k(h_k)
-                k_pcd = nn.functional.normalize(z_k, dim=1)
-            else:
-                # coord and feat in the shape N*SxPx3 and N*SxPxF
-                # where N is the batch size and S is the number of segments in each scan
-                h_ks = list_segments_points(h_k.C, h_k.F, segments[1])
-
-                z_ks = self.head_k(h_ks)
-                k_seg = nn.functional.normalize(z_ks, dim=1)
+            z_ks = self.head_k(h_ks)
+            k_seg = nn.functional.normalize(z_ks, dim=1)
 
         if segments is None:
             # compute logits
@@ -350,23 +269,39 @@ class MoCoVICReg(nn.Module):
 
             return logits_pcd, labels_pcd
         else:
-            l_pos_seg = torch.einsum('nc,nc->n', [q_seg, k_seg]).unsqueeze(-1)
-            # negative logits: NxK
-            l_neg_seg = torch.einsum('nc,ck->nk', [q_seg, self.queue_seg.clone().detach()])
+            return self.vicreg_loss(q_seg, k_seg)
+        
+    def off_diagonal(self, x):
+        n, m = x.shape
+        assert n == m
+        return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
 
-            # logits: Nx(1+K)
-            logits_seg = torch.cat([l_pos_seg, l_neg_seg], dim=1)
+    def vicreg_loss(self, x, y):
+        # Variance
+        diff_x = x - torch.mean(x, dim=0)
+        diff_y = y - torch.mean(y, dim=0)
+        std_x = torch.sqrt(diff_x.var(dim=0) + self.args.vicreg_eps)
+        std_y = torch.sqrt(diff_y.var(dim=0) + self.args.vicreg_eps)
+        var_loss_x = torch.mean(F.relu(self.args.vicreg_gamma - std_x))
+        var_loss_y = torch.mean(F.relu(self.args.vicreg_gamma - std_y))
+        var_loss = (var_loss_x + var_loss_y) / 2
 
-            # apply temperature
-            logits_seg /= self.T
+        # Invariance
+        inv_loss = F.mse_loss(x, y)
 
-            # labels: positive key indicators
-            labels_seg = torch.zeros(logits_seg.shape[0], dtype=torch.long).cuda()
+        # Covariance
+        cov_x = (diff_x.T @ diff_x) / (x.shape[0] - 1)
+        cov_y = (diff_y.T @ diff_y) / (y.shape[0] - 1)
+        cov_loss_x = self.off_diagonal(cov_x).pow_(2).sum().div(x.shape[1])
+        cov_loss_y = self.off_diagonal(cov_y).pow_(2).sum().div(y.shape[1])
+        cov_loss = (cov_loss_x + cov_loss_y) / 2
 
-            # dequeue and enqueue
-            self._dequeue_and_enqueue_seg(k_seg)
+        # Total loss
+        loss = self.args.vicreg_var_coeff * var_loss + \
+               self.args.vicreg_inv_coeff * inv_loss + \
+               self.args.vicreg_cov_coeff * cov_loss
 
-            return logits_seg, labels_seg
+        return loss
 
 @torch.no_grad()
 def concat_all_gather(tensor):

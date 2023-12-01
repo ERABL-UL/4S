@@ -45,45 +45,6 @@ def list_segments_points(p_coord, p_feats, labels):
             )
 
 
-# TODO keep the batch dimension
-def list_segments_points_batch(p_coord, p_feats, labels):
-    """
-    Same as `list_segments_points_batch`, but keep the batch dimension
-    """
-    c_coord = []
-    c_feats = []
-
-    seg_batch_count = 0
-
-    for batch_num in range(labels.shape[0]):
-        for segment_lbl in np.unique(labels[batch_num]):
-            if segment_lbl == -1:
-                continue
-
-            batch_ind = p_coord[:,0] == batch_num
-            segment_ind = labels[batch_num] == segment_lbl
-
-            # we are listing from sparse tensor, the first column is the batch index, which we drop
-            segment_coord = p_coord[batch_ind][segment_ind][:,:]
-            segment_coord[:,0] = seg_batch_count
-            seg_batch_count += 1
-
-            segment_feats = p_feats[batch_ind][segment_ind]
-
-            c_coord.append(segment_coord)
-            c_feats.append(segment_feats)
-
-    seg_coord = torch.vstack(c_coord)
-    seg_feats = torch.vstack(c_feats)
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    return ME.SparseTensor(
-                features=seg_feats,
-                coordinates=seg_coord,
-                device=device,
-            )
-
 def numpy_to_sparse_tensor(p_coord, p_feats, p_label=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     p_coord = ME.utils.batched_coordinates(array_to_sequence(p_coord), dtype=torch.float32)

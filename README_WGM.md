@@ -7,6 +7,21 @@ cp .devcontainer/devcontainer.json.turing .devcontainer/devcontainer.json
 
 # In container
 pip3 install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --no-deps
+
+# Run
+python3 contrastive_train.py --vicreg --batch-size 32 --feature-size 128 \
+    --dataset-name SemanticKITTI \
+    --data-dir ./Datasets/SemanticKITTI \
+    --epochs 200 \
+    --lr 0.12 \
+    --num-points 20000 \
+    --use-cuda \
+    --use-intensity \
+    --segment-contrast \
+    --checkpoint segcontrast
+
+# Tensorboard
+tensorboard --logdir lightning_logs
 ```
 
 ## Training
@@ -24,5 +39,5 @@ docker run --gpus all -e CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES --rm -it \
   --mount type=bind,source=/dev/shm,target=/dev/shm \
   --mount type=bind,source=$(pwd),target=/app/ \
   --mount type=bind,source=/home/william/Datasets,target=/app/Datasets \
-  vicregl python3 contrastive_train.py --use-cuda --use-intensity --segment-contrast --checkpoint segcontrast
+  vicregl python3 contrastive_train.py --use-cuda --use-intensity --segment-contrast --checkpoint segcontrast --vicreg
 ```

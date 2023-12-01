@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     nvidia-cuda-toolkit \
     && rm -rf /var/lib/apt/lists/*
 
+ENV SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True
 RUN pip3 install \
     scikit-learn \
     matplotlib==3.3.4 \

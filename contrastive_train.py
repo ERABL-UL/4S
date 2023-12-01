@@ -80,7 +80,7 @@ if __name__ == "__main__":
 
     data_train, data_test = get_dataset(args)
     train_loader, _ = get_data_loader(data_train, data_test, args)
-    criterion = nn.CrossEntropyLoss().cuda()
+    criterion = nn.CrossEntropyLoss().cuda() if not args.vicreg else None
 
     model = get_moco_model(args, dtype)
 
