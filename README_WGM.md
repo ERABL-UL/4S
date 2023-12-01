@@ -9,7 +9,7 @@ cp .devcontainer/devcontainer.json.turing .devcontainer/devcontainer.json
 pip3 install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --no-deps
 
 # Run
-python3 contrastive_train.py --vicreg --batch-size 32 --feature-size 128 \
+python3 contrastive_train.py --vicreg --batch-size 64 --feature-size 128 --num-workers 8 \
     --dataset-name SemanticKITTI \
     --data-dir ./Datasets/SemanticKITTI \
     --epochs 200 \

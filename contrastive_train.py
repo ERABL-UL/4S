@@ -50,7 +50,9 @@ if __name__ == "__main__":
     parser.add_argument('--segment-contrast', action='store_true', default=False,
                         help='Use segments patches for contrastive learning (default: False')
     
-    # VICReg arguments
+    # VICReg arguments and added arguments
+    parser.add_argument('--num-workers', type=int, default=0, help='Number of workers for data loader')
+
     parser.add_argument('--vicreg', action='store_true', default=False, help='Use VICReg')
     parser.add_argument('--vicreg-alpha', type=float, default=0.75,
                         help='VICRegL alpha that controls the importance put on learning global vs local features.'
@@ -69,6 +71,10 @@ if __name__ == "__main__":
     # parser.add_argument('--vicreg-global-dim', type=int, default=128, help='Dimension of global features')
 
     args = parser.parse_args()
+
+    torch.backends.cudnn.enabled = True
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.allow_tf32 = True
 
     if args.use_cuda:
         dtype = torch.cuda.FloatTensor

@@ -102,7 +102,7 @@ def get_data_loader(data_train, data_test, args, pre_training=True):
         batch_size=args.batch_size,
         collate_fn=collate_fn,
         shuffle=True,
-        num_workers=0
+        num_workers=args.num_workers
     )
 
     test_loader = torch.utils.data.DataLoader(
@@ -110,7 +110,7 @@ def get_data_loader(data_train, data_test, args, pre_training=True):
         batch_size=args.batch_size,
         collate_fn=collate_fn,
         shuffle=True,
-        num_workers=0
+        num_workers=args.num_workers
     )
 
     return train_loader, test_loader

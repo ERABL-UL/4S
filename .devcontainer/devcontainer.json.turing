@@ -26,7 +26,8 @@
 		"source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
 		"source=/dev/shm,target=/dev/shm,type=bind",
 		"type=bind,source=/home/${localEnv:USER}/.ssh,target=/root/.ssh,readonly",
-		"type=bind,source=/home/${localEnv:USER}/Datasets,target=/workspaces/4S/Datasets"
+		"type=bind,source=/home/${localEnv:USER}/Datasets,target=/workspaces/4S/Datasets",
+		"type=bind,source=/run/media/william/Data/VICRegL-PC,target=/workspaces/4S/lightning_logs"
 	],
 	"containerEnv": {
 		"DISPLAY": ":1",

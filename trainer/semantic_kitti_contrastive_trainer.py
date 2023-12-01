@@ -18,7 +18,7 @@ class SemanticKITTIContrastiveTrainer(pl.LightningModule):
         self.params = params
         self.segment_contrast = self.params.segment_contrast
         self.writer = SummaryWriter(f'runs/{params.checkpoint}')
-        self.iter_log = 100
+        self.iter_log = 10
         self.loss_eval = []
         self.train_step = 0
 
