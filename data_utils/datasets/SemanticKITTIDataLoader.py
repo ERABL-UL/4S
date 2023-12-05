@@ -42,17 +42,10 @@ class SemanticKITTIDataLoader(Dataset):
 
         for seq in self.seq_ids[split]:
             point_seq_path = os.path.join(self.root, split, 'sequences', seq)
-            point_seq_bin = os.listdir(point_seq_path)
-            point_seq_bin.sort()
-            self.points_datapath += [ os.path.join(point_seq_path, point_file) for point_file in point_seq_bin ]
+            point_seq_ply = os.listdir(point_seq_path)
+            point_seq_ply.sort()
+            self.points_datapath += [ os.path.join(point_seq_path, point_file) for point_file in point_seq_ply ]
 
-            # try:
-            #     label_seq_path = os.path.join(self.root, split, 'sequences', seq)
-            #     point_seq_label = os.listdir(label_seq_path)
-            #     point_seq_label.sort()
-            #     self.labels_datapath += [ os.path.join(label_seq_path, label_file) for label_file in point_seq_label ]
-            # except:
-            #     pass
 
 
     def transforms_segment(self, points, drop=False):
