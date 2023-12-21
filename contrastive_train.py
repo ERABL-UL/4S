@@ -7,6 +7,7 @@ from losses.contrastive import ContrastiveLoss
 import argparse
 from numpy import inf
 import MinkowskiEngine as ME
+import pathlib
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='SparseSimCLR')
@@ -72,6 +73,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Create log directory
+    logdir = pathlib.Path(args.log_dir)
+    logdir.mkdir(parents=True, exist_ok=True)
+
     torch.backends.cudnn.enabled = True
     torch.backends.cudnn.benchmark = True
     torch.backends.cudnn.allow_tf32 = True
@@ -97,5 +102,5 @@ if __name__ == "__main__":
 
     else:
         model_sem_kitti = SemanticKITTIContrastiveTrainer(model, criterion, train_loader, args)
-        trainer = Trainer(gpus=[0], max_epochs=args.epochs, accumulate_grad_batches=args.accum_steps)
+        trainer = Trainer(gpus=[0], max_epochs=args.epochs, accumulate_grad_batches=args.accum_steps, limit_train_batches=2)
         trainer.fit(model_sem_kitti)
