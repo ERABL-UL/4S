@@ -101,7 +101,7 @@ def get_data_loader(data_train, data_test, args, pre_training=True):
         data_train,
         batch_size=args.batch_size,
         collate_fn=collate_fn,
-        shuffle=True,
+        shuffle=args.shuffle,
         num_workers=args.num_workers
     )
 
@@ -109,7 +109,7 @@ def get_data_loader(data_train, data_test, args, pre_training=True):
         data_test,
         batch_size=args.batch_size,
         collate_fn=collate_fn,
-        shuffle=True,
+        shuffle=args.shuffle,
         num_workers=args.num_workers
     )
 

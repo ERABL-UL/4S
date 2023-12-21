@@ -50,6 +50,7 @@ if __name__ == "__main__":
                         help='Number steps to accumulate gradient')
     parser.add_argument('--segment-contrast', action='store_true', default=False,
                         help='Use segments patches for contrastive learning (default: False')
+    parser.add_argument('--shuffle', action='store_true', default=False, help='Shuffle dataset (default: False)')
     
     # VICReg arguments and added arguments
     parser.add_argument('--num-workers', type=int, default=0, help='Number of workers for data loader')
@@ -102,5 +103,5 @@ if __name__ == "__main__":
 
     else:
         model_sem_kitti = SemanticKITTIContrastiveTrainer(model, criterion, train_loader, args)
-        trainer = Trainer(gpus=[0], max_epochs=args.epochs, accumulate_grad_batches=args.accum_steps, limit_train_batches=2)
+        trainer = Trainer(gpus=[0], max_epochs=args.epochs, accumulate_grad_batches=args.accum_steps, limit_train_batches=1)
         trainer.fit(model_sem_kitti)

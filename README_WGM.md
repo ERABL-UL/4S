@@ -82,5 +82,7 @@ cd
 cd scratch/Phase3/4S_WGM
 
 # Start training
-python contrastive_train.py --data-dir $SLURM_TMPDIR/Data/SemanticKITTI --vicreg --batch-size 32 --feature-size 128 --num-workers 8
+# python contrastive_train.py --data-dir $SLURM_TMPDIR/Data/SemanticKITTI --vicreg --batch-size 32 --feature-size 128 --num-workers 8
+
+python3 contrastive_train.py --vicreg --batch-size 64 --feature-size 128 --num-workers 8     --dataset-name SemanticKITTI     --data-dir $SLURM_TMPDIR/Data/SemanticKITTI     --epochs 200     --lr 0.12     --num-points 20000     --use-cuda     --use-intensity     --segment-contrast     --checkpoint segcontrast
 ```
