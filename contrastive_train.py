@@ -1,12 +1,14 @@
 from trainer.semantic_kitti_contrastive_trainer import SemanticKITTIContrastiveTrainer
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import TensorBoardLogger
 import torch
 from utils import *
 from losses.contrastive import ContrastiveLoss
 import argparse
 from numpy import inf
 import MinkowskiEngine as ME
+import pathlib
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='SparseSimCLR')
@@ -49,6 +51,7 @@ if __name__ == "__main__":
                         help='Number steps to accumulate gradient')
     parser.add_argument('--segment-contrast', action='store_true', default=False,
                         help='Use segments patches for contrastive learning (default: False')
+    parser.add_argument('--shuffle', action='store_true', default=False, help='Shuffle dataset (default: False)')
     
     # VICReg arguments and added arguments
     parser.add_argument('--num-workers', type=int, default=0, help='Number of workers for data loader')
@@ -71,6 +74,10 @@ if __name__ == "__main__":
     # parser.add_argument('--vicreg-global-dim', type=int, default=128, help='Dimension of global features')
 
     args = parser.parse_args()
+
+    # Create log directory
+    logdir = pathlib.Path(args.log_dir)
+    logdir.mkdir(parents=True, exist_ok=True)
 
     torch.backends.cudnn.enabled = True
     torch.backends.cudnn.benchmark = True
