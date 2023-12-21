@@ -1,6 +1,7 @@
 from trainer.semantic_kitti_contrastive_trainer import SemanticKITTIContrastiveTrainer
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import TensorBoardLogger
 import torch
 from utils import *
 from losses.contrastive import ContrastiveLoss
@@ -103,5 +104,5 @@ if __name__ == "__main__":
 
     else:
         model_sem_kitti = SemanticKITTIContrastiveTrainer(model, criterion, train_loader, args)
-        trainer = Trainer(gpus=[0], max_epochs=args.epochs, accumulate_grad_batches=args.accum_steps, limit_train_batches=1)
+        trainer = Trainer(gpus=[0], max_epochs=args.epochs, accumulate_grad_batches=args.accum_steps)
         trainer.fit(model_sem_kitti)
