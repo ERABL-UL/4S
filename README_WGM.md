@@ -9,7 +9,7 @@ cp .devcontainer/devcontainer.json.turing .devcontainer/devcontainer.json
 pip3 install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --no-deps
 
 # Run
-python3 contrastive_train.py --vicreg --batch-size 64 --feature-size 128 --num-workers 8 \
+python3 contrastive_train.py --vicreg --batch-size 32 --feature-size 128 --num-workers 8 \
     --dataset-name SemanticKITTI \
     --data-dir ./Datasets/SemanticKITTI \
     --epochs 200 \
@@ -76,7 +76,7 @@ On Compute Canada:
 #SBATCH --mem=32000M
 #SBATCH --gres=gpu:v100l:1 
 #SBATCH --time=01-10:00     # DD-HH:MM:SS
-#SBATCH --mail-user=reza.mahmoudi-kouhi.1@ulaval.ca
+#SBATCH --mail-user=william.guimont-martin.1@ulaval.ca
 #SBATCH --mail-type=BEGIN
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL
@@ -109,5 +109,5 @@ cd scratch/Phase3/4S_WGM
 # Start training
 # python contrastive_train.py --data-dir $SLURM_TMPDIR/Data/SemanticKITTI --vicreg --batch-size 32 --feature-size 128 --num-workers 8
 
-python3 contrastive_train.py --vicreg --batch-size 64 --feature-size 128 --num-workers 8     --dataset-name SemanticKITTI     --data-dir $SLURM_TMPDIR/Data/SemanticKITTI     --epochs 200     --lr 0.12     --num-points 20000     --use-cuda     --use-intensity     --segment-contrast     --checkpoint segcontrast
+python3 contrastive_train.py --vicreg --batch-size 32 --feature-size 128 --num-workers 8     --dataset-name SemanticKITTI     --data-dir $SLURM_TMPDIR/Data/SemanticKITTI     --epochs 200     --lr 0.12     --num-points 20000     --use-cuda     --use-intensity     --segment-contrast     --checkpoint segcontrast
 ```
