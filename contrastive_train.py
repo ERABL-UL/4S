@@ -81,7 +81,7 @@ if __name__ == "__main__":
 
     torch.backends.cudnn.enabled = True
     torch.backends.cudnn.benchmark = True
-    torch.backends.cudnn.allow_tf32 = True
+    # torch.backends.cudnn.allow_tf32 = True
 
     if args.use_cuda:
         dtype = torch.cuda.FloatTensor
@@ -95,6 +95,7 @@ if __name__ == "__main__":
     train_loader, _ = get_data_loader(data_train, data_test, args)
     criterion = nn.CrossEntropyLoss().cuda() if not args.vicreg else None
 
+    print(args)
     model = get_moco_model(args, dtype)
 
     if torch.cuda.device_count() > 1:

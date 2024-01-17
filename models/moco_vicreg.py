@@ -301,7 +301,10 @@ class MoCoVICReg(nn.Module):
                self.args.vicreg_inv_coeff * inv_loss + \
                self.args.vicreg_cov_coeff * cov_loss
 
-        return loss
+        return {'loss': loss, 
+                'var_loss': var_loss * self.args.vicreg_var_coeff, 
+                'inv_loss': inv_loss * self.args.vicreg_inv_coeff, 
+                'cov_loss': cov_loss * self.args.vicreg_cov_coeff}
 
 @torch.no_grad()
 def concat_all_gather(tensor):

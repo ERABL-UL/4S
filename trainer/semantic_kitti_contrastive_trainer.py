@@ -20,7 +20,11 @@ class SemanticKITTIContrastiveTrainer(pl.LightningModule):
         self.writer = SummaryWriter(f'runs/{params.checkpoint}')
         self.iter_log = 10
         self.loss_eval = []
+        self.loss_var = []
+        self.loss_inv = []
+        self.loss_cov = []
         self.train_step = 0
+        self.iter = 0
 
         if self.params.load_checkpoint:
             self.load_checkpoint()
@@ -44,14 +48,39 @@ class SemanticKITTIContrastiveTrainer(pl.LightningModule):
         xi, xj = collate_points_to_sparse_tensor(xi_coord, xi_feats, xj_coord, xj_feats)
 
         if self.params.vicreg:
-            loss = self.forward(xi, xj, [si, sj])
+            loss_dict = self.forward(xi, xj, [si, sj])
+            loss = loss_dict['loss']
         else:
             out_seg, tgt_seg = self.forward(xi, xj, [si, sj])
             loss = self.criterion(out_seg, tgt_seg)
 
         self.contrastive_iter_callback(loss.item())
 
-        return {'loss': loss}
+        self.loss_var.append(loss_dict['var_loss'].item())
+        self.loss_inv.append(loss_dict['inv_loss'].item())
+        self.loss_cov.append(loss_dict['cov_loss'].item())
+
+        self.write_summary(
+            'training/loss_var_iter',
+            loss_dict['var_loss'],
+            self.iter,
+        )
+        self.write_summary(
+            'training/loss_inv_iter',
+            loss_dict['inv_loss'],
+            self.iter,
+        )
+        self.write_summary(
+            'training/loss_cov_iter',
+            loss_dict['cov_loss'],
+            self.iter,
+        )
+        self.iter += 1
+
+        return {'loss': loss,
+                'var_loss': loss_dict['var_loss'].item(), 
+                'inv_loss': loss_dict['inv_loss'].item(),
+                'cov_loss': loss_dict['cov_loss'].item()}
 
     def pre_training_step(self, batch, batch_nb):
         (xi_coord, xi_feats, _), (xj_coord, xj_feats, _) = batch
@@ -65,6 +94,9 @@ class SemanticKITTIContrastiveTrainer(pl.LightningModule):
         return {'loss': loss}
 
     def training_step(self, batch, batch_nb):
+        # print(f'Batch number: {batch_nb}')
+        # if batch_nb == 0:
+        #     torch.save(self.moco_model, f'checkpoint/debug/vic_{self.train_step}.pt')
         self.train_step += 1
         torch.cuda.empty_cache()
         return self.pre_training_segment_step(batch, batch_nb) if self.segment_contrast else self.pre_training_step(batch, batch_nb)
@@ -106,8 +138,26 @@ class SemanticKITTIContrastiveTrainer(pl.LightningModule):
                 mean(self.loss_eval),
                 self.train_step,
             )
-
             self.loss_eval = []
+            self.write_summary(
+                'training/loss_var',
+                mean(self.loss_var),
+                self.train_step,
+            )
+            self.loss_var = []
+            self.write_summary(
+                'training/loss_inv',
+                mean(self.loss_inv),
+                self.train_step,
+            )
+            self.loss_inv = []
+            self.write_summary(
+                'training/loss_cov',
+                mean(self.loss_cov),
+                self.train_step,
+            )
+            self.loss_cov = []
+
 
     ############################################################################################################################################
 
