@@ -33,7 +33,8 @@ cd
 cd scratch/Phase3/4S_WGM
 
 # Start training
-EXP_NAME=segvic_07
+filename=$(basename -- $0)
+EXP_NAME="${filename%.*}"
 python3 contrastive_train.py --vicreg --batch-size 32 --feature-size 256 --lr 0.001 \
     --num-workers 8 --dataset-name SemanticKITTI --data-dir $SLURM_TMPDIR/Data/SemanticKITTI \
     --epochs 200 --num-points 20000 --use-cuda --use-intensity --segment-contrast --checkpoint $EXP_NAME

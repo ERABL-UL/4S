@@ -34,14 +34,14 @@ class MoCoVICReg(nn.Module):
         self.head_k = model_head(in_channels=latent_features[args.sparse_model], out_channels=args.feature_size)#.type(dtype)
 
         # initialize model k and q
-        for param_q, param_k in zip(self.model_q.parameters(), self.model_k.parameters()):
-            param_k.data.copy_(param_q.data)
-            param_k.requires_grad = False
+        # for param_q, param_k in zip(self.model_q.parameters(), self.model_k.parameters()):
+            # param_k.data.copy_(param_q.data)
+            # param_k.requires_grad = False
 
         # initialize headection head k and q
-        for param_q, param_k in zip(self.head_q.parameters(), self.head_k.parameters()):
-            param_k.data.copy_(param_q.data)
-            param_k.requires_grad = False
+        # for param_q, param_k in zip(self.head_q.parameters(), self.head_k.parameters()):
+            # param_k.data.copy_(param_q.data)
+            # param_k.requires_grad = False
 
         self.register_buffer('queue_pcd', torch.randn(args.feature_size,K))
         self.queue_pcd = nn.functional.normalize(self.queue_pcd, dim=0)
